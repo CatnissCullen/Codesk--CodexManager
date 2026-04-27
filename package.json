@@ -1,0 +1,87 @@
+{
+  "name": "codex-task-manager-vscode",
+  "displayName": "Codesk",
+  "description": "Manage Codex task sessions by project and rename tasks from Codesk.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:codesk.open",
+    "onCommand:codesk.refresh",
+    "onCommand:codesk.renameTask",
+    "onView:codesk.main"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codesk.open",
+        "title": "Codesk: Open"
+      },
+      {
+        "command": "codesk.refresh",
+        "title": "Codesk: Refresh"
+      },
+      {
+        "command": "codesk.renameTask",
+        "title": "Codesk: Rename Task"
+      }
+    ],
+    "configuration": {
+      "title": "Codesk",
+      "properties": {
+        "codesk.codexHome": {
+          "type": "string",
+          "default": "",
+          "description": "Custom CODEX_HOME path. Leave empty to use ~/.codex."
+        },
+        "codesk.defaultScope": {
+          "type": "string",
+          "enum": [
+            "project",
+            "all"
+          ],
+          "default": "project",
+          "description": "Default task scope when opening the manager."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codesk",
+          "title": "Codesk",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "codesk": [
+        {
+          "id": "codesk.main",
+          "name": "Codesk",
+          "type": "webview"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "codesk.main",
+        "contents": "Open Codesk.\\n[Open Manager](command:codesk.open)"
+      }
+    ]
+  },
+  "scripts": {
+    "check": "node --check extension.js && node --check media/webview.js",
+    "package:vsix": "node -e \"require('fs').mkdirSync('dist',{recursive:true});require('fs').mkdirSync('D:/VSCode/.codesk-npm-cache',{recursive:true})\" && npx --yes --cache D:/VSCode/.codesk-npm-cache -p @vscode/vsce@2.15.0 -p cheerio@1.0.0-rc.12 vsce package --allow-missing-repository --out dist/codesk-0.1.0.vsix"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0"
+  }
+}

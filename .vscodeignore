@@ -1,0 +1,6 @@
+.vscode/**
+.git/**
+dist/**
+node_modules/**
+.npm-cache/**
+*.vsix

@@ -8,6 +8,8 @@
 
 Codesk is a standalone VS Code extension for browsing, searching, and managing local Codex conversations stored under `~/.codex`.
 
+![Codesk interface](media/img.jpg)
+
 ## Desk View
 
 - Workspace-aware conversation list

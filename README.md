@@ -96,4 +96,3 @@ dist/codesk-0.1.0.vsix
 
 - Codesk depends on the VS Code Extension Host runtime support for `node:sqlite`.
 - Your system Node.js installation does not need to support `node:sqlite`, but the VS Code runtime does.
-- Some actions, such as opening a conversation in the official Codex extension, require the official OpenAI Codex extension to be installed.

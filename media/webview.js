@@ -50,6 +50,7 @@
     emptyState: document.getElementById("emptyState"),
     detailCard: document.getElementById("detailCard"),
     detailTitle: document.getElementById("detailTitle"),
+    detailProjectPath: document.getElementById("detailProjectPath"),
     openTaskBtn: document.getElementById("openTaskBtn"),
     archiveTaskBtn: document.getElementById("archiveTaskBtn"),
     deleteTaskBtn: document.getElementById("deleteTaskBtn"),
@@ -367,6 +368,10 @@
     els.detailCard.classList.remove("hidden");
 
     els.detailTitle.textContent = task.title || task.firstUserMessage || task.id;
+    const projectPath = String(task.projectPath || "").trim();
+    els.detailProjectPath.textContent = projectPath;
+    els.detailProjectPath.title = projectPath;
+    els.detailProjectPath.classList.toggle("hidden", !projectPath);
     els.openTaskBtn.textContent = task.archived ? "Restore" : "Open";
     els.archiveTaskBtn.classList.toggle("hidden", !!task.archived);
     els.deleteTaskBtn.classList.toggle("hidden", !task.archived);
@@ -380,6 +385,7 @@
     els.firstMessage.textContent = task.firstUserMessage || "No first user message";
     const postForkMessage = String(task.postForkFirstUserMessage || "").trim();
     els.postForkMessageSection.classList.toggle("hidden", !postForkMessage);
+    els.postForkMessageSection.open = false;
     els.postForkFirstMessage.textContent = postForkMessage || "";
 
     const fork = state.detail?.fork;

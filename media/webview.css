@@ -467,6 +467,20 @@ mark {
   word-break: break-word;
 }
 
+.detail-project-path {
+  margin-top: 4px;
+  display: inline-block;
+  max-width: 100%;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 7px;
+  color: #d0d0d0;
+  background: #2a2a2a;
+  font-size: 10.5px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 .sensitive-actions {
   display: flex;
   flex-wrap: wrap;
@@ -526,6 +540,43 @@ mark {
 
 .hidden {
   display: none !important;
+}
+
+.message-fold {
+  display: grid;
+  gap: 8px;
+}
+
+.message-fold summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.message-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.message-fold summary::before {
+  content: "";
+  display: block;
+  flex: 0 0 auto;
+  width: 1.5em;
+  height: 1.5em;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 5 L18 12 L8 19 Z' fill='%237f96f5' stroke='%23ffffff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.message-fold[open] summary::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 8 L12 18 L19 8 Z' fill='%237f96f5' stroke='%23ffffff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 h3 {

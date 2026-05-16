@@ -232,9 +232,26 @@ function getCodexPaths() {
 }
 
 function getWorkspaceRoots() {
+  return getWorkspaceFolderInfos()
+    .map((info) => info.normalized)
+    .filter(Boolean);
+}
+
+function getWorkspaceFolderInfos() {
   const folders = vscode.workspace.workspaceFolders || [];
   return folders
-    .map((folder) => normalizePathForCompare(folder.uri.fsPath))
+    .map((folder) => {
+      const actual = normalizePathForDisplay(folder.uri.fsPath);
+      const normalized = normalizePathForCompare(actual);
+      if (!actual || !normalized) {
+        return null;
+      }
+      return {
+        actual,
+        normalized,
+        nameNormalized: path.basename(normalized),
+      };
+    })
     .filter(Boolean);
 }
 
@@ -340,6 +357,19 @@ function normalizePathForCompare(inputPath) {
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 
+function normalizePathForDisplay(inputPath) {
+  const raw = normalizeWindowsNamespacePath(String(inputPath || "").trim());
+  if (!raw) {
+    return "";
+  }
+
+  let normalized = path.resolve(raw).replace(/[\\/]+/g, path.sep);
+  while (normalized.length > 1 && /[\\/]$/.test(normalized)) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+}
+
 function normalizeWindowsNamespacePath(inputPath) {
   if (process.platform !== "win32") {
     return inputPath;
@@ -369,7 +399,85 @@ function isPathInsideAnyRoot(candidatePath, roots) {
   });
 }
 
-function mapTaskRow(row, sessionNames = null) {
+function resolveTaskWorkspacePath(cwd, workspaceInfos = null) {
+  const normalizedCwd = normalizePathForCompare(cwd);
+  const displayCwd = normalizePathForDisplay(cwd);
+  const infos = Array.isArray(workspaceInfos) ? workspaceInfos : getWorkspaceFolderInfos();
+  if (!normalizedCwd) {
+    return {
+      cwd: displayCwd,
+      projectPath: "",
+      remapped: false,
+    };
+  }
+
+  const directMatch = infos.find((info) => {
+    if (normalizedCwd === info.normalized) {
+      return true;
+    }
+    const prefix = info.normalized.endsWith(path.sep) ? info.normalized : `${info.normalized}${path.sep}`;
+    return normalizedCwd.startsWith(prefix);
+  });
+  if (directMatch) {
+    return {
+      cwd: displayCwd,
+      projectPath: directMatch.actual,
+      remapped: false,
+    };
+  }
+
+  const cwdSegments = normalizedCwd.split(path.sep).filter(Boolean);
+  let bestMatch = null;
+  for (const info of infos) {
+    if (!info.nameNormalized) {
+      continue;
+    }
+    for (let index = 0; index < cwdSegments.length; index += 1) {
+      if (cwdSegments[index] !== info.nameNormalized) {
+        continue;
+      }
+      const suffixSegments = cwdSegments.slice(index + 1);
+      const candidateActual = normalizePathForDisplay(
+        suffixSegments.length ? path.join(info.actual, ...suffixSegments) : info.actual,
+      );
+      if (!candidateActual) {
+        continue;
+      }
+      const candidateExists = fs.existsSync(candidateActual);
+      const rootExists = fs.existsSync(info.actual);
+      if (!candidateExists && !(rootExists && suffixSegments.length === 0)) {
+        continue;
+      }
+      const score = candidateExists ? 2 : 1;
+      const depth = suffixSegments.length;
+      if (!bestMatch || score > bestMatch.score || (score === bestMatch.score && depth > bestMatch.depth)) {
+        bestMatch = {
+          cwd: candidateActual,
+          projectPath: info.actual,
+          remapped: true,
+          score,
+          depth,
+        };
+      }
+    }
+  }
+
+  if (bestMatch) {
+    return {
+      cwd: bestMatch.cwd,
+      projectPath: bestMatch.projectPath,
+      remapped: true,
+    };
+  }
+
+  return {
+    cwd: displayCwd,
+    projectPath: "",
+    remapped: false,
+  };
+}
+
+function mapTaskRow(row, sessionNames = null, workspaceInfos = null) {
   const { codexHome } = getCodexPaths();
   const rawRolloutPath = row.rollout_path || "";
   const rolloutPath = resolveExistingRolloutPath(codexHome, rawRolloutPath);
@@ -377,13 +485,16 @@ function mapTaskRow(row, sessionNames = null) {
   const sessionTitle = String(sessionNames?.get(cleanId) || "").trim();
   const dbTitle = String(row.title || "").trim();
   const rolloutFirstUserMessage = readFirstUserMessageFromRollout(rolloutPath);
+  const resolvedWorkspacePath = resolveTaskWorkspacePath(row.cwd || "", workspaceInfos);
   return {
     id: row.id || "",
     title: sessionTitle || dbTitle || row.first_user_message || row.id || "",
     rawTitle: dbTitle,
     sessionTitle,
     firstUserMessage: rolloutFirstUserMessage || row.first_user_message || "",
-    cwd: row.cwd || "",
+    cwd: resolvedWorkspacePath.cwd || row.cwd || "",
+    rawCwd: row.cwd || "",
+    projectPath: resolvedWorkspacePath.projectPath || resolvedWorkspacePath.cwd || row.cwd || "",
     rolloutPath,
     rawRolloutPath,
     createdAt: toIso(row.created_at),
@@ -699,6 +810,7 @@ function getSessionIndexNames(indexPath) {
 function getAllActiveTasks() {
   const { sessionIndexPath } = getCodexPaths();
   const sessionNames = getSessionIndexNames(sessionIndexPath);
+  const workspaceInfos = getWorkspaceFolderInfos();
   const db = openDb(true);
   try {
     return dbAll(
@@ -706,7 +818,7 @@ function getAllActiveTasks() {
       `SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived
        FROM threads
        ORDER BY updated_at DESC, id DESC`,
-    ).map((row) => mapTaskRow(row, sessionNames));
+      ).map((row) => mapTaskRow(row, sessionNames, workspaceInfos));
   } finally {
     closeDb(db);
   }
@@ -844,6 +956,7 @@ function getTaskById(id) {
 
   const { sessionIndexPath } = getCodexPaths();
   const sessionNames = getSessionIndexNames(sessionIndexPath);
+  const workspaceInfos = getWorkspaceFolderInfos();
   const db = openDb(true);
   try {
     const row = dbGet(
@@ -856,7 +969,7 @@ function getTaskById(id) {
     if (!row) {
       throw new Error("Task not found.");
     }
-    return mapTaskRow(row, sessionNames);
+    return mapTaskRow(row, sessionNames, workspaceInfos);
   } finally {
     closeDb(db);
   }
@@ -923,6 +1036,7 @@ function getTaskReferenceById(id) {
 
   const { sessionIndexPath } = getCodexPaths();
   const sessionNames = getSessionIndexNames(sessionIndexPath);
+  const workspaceInfos = getWorkspaceFolderInfos();
   const db = openDb(true);
   try {
     const row = dbGet(
@@ -932,7 +1046,7 @@ function getTaskReferenceById(id) {
        WHERE id = ?`,
       [cleanId],
     );
-    return row ? mapTaskRow(row, sessionNames) : null;
+    return row ? mapTaskRow(row, sessionNames, workspaceInfos) : null;
   } finally {
     closeDb(db);
   }
@@ -1739,6 +1853,7 @@ function getWebviewHtml(webview, extensionUri) {
             <div class="detail-head">
               <div class="detail-title-wrap">
                 <h2 id="detailTitle" class="detail-title"></h2>
+                <div id="detailProjectPath" class="detail-project-path hidden"></div>
               </div>
               <button id="renameBtn" class="btn primary rename-btn">Rename</button>
             </div>
@@ -1768,15 +1883,15 @@ function getWebviewHtml(webview, extensionUri) {
               <span>Updated: <span id="detailUpdated"></span></span>
             </p>
 
-            <section>
-              <h3>First user message</h3>
+            <details id="firstMessageSection" class="message-fold">
+              <summary>First user message</summary>
               <pre id="firstMessage" class="first-message"></pre>
-            </section>
+            </details>
 
-            <section id="postForkMessageSection" class="hidden">
-              <h3>First message after fork</h3>
+            <details id="postForkMessageSection" class="message-fold hidden">
+              <summary>First message after fork</summary>
               <pre id="postForkFirstMessage" class="first-message"></pre>
-            </section>
+            </details>
 
             <section>
               <h3>Forked from</h3>

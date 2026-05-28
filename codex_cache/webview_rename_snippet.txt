@@ -1,0 +1,67 @@
+--- media/webview.js:530-595 ---
+  530:     setStatus("Refresh complete", "success");
+  531:   }
+  532: 
+  533:   async function navigateToFork(id, archived) {
+  534:     const nextArchiveFilter = archived ? "archived" : "active";
+  535:     const needsArchiveSwitch = state.archiveFilter !== nextArchiveFilter;
+  536:     if (needsArchiveSwitch) {
+  537:       state.archiveFilter = nextArchiveFilter;
+  538:       renderScope();
+  539:       await loadList({
+  540:         keepSelection: true,
+  541:         preserveDetailSelection: true,
+  542:       });
+  543:     }
+  544:     await selectTask(id, { scrollListToCenter: true });
+  545:   }
+  546: 
+  547:   async function renameSelected() {
+  548:     if (!state.selectedId) {
+  549:       setStatus("Select a task first", "error");
+  550:       return;
+  551:     }
+  552: 
+  553:     try {
+  554:       const result = await rpc("promptRenameTask", { id: state.selectedId });
+  555:       if (result?.cancelled) {
+  556:         setStatus("Rename cancelled");
+  557:         return;
+  558:       }
+  559:       if (result?.unchanged) {
+  560:         setStatus("Name unchanged");
+  561:         return;
+  562:       }
+  563:       if (state.detail?.task?.id === state.selectedId) {
+  564:         state.detail.task.title = result.title;
+  565:         state.detail.task.updatedAt = result.updatedAt || state.detail.task.updatedAt;
+  566:       }
+  567:       const item = state.items.find((entry) => entry.id === state.selectedId);
+  568:       if (item) {
+  569:         item.title = result.title;
+  570:         item.updatedAt = result.updatedAt || item.updatedAt;
+  571:       }
+  572:       state.optimisticRename = {
+  573:         id: state.selectedId,
+  574:         title: result.title,
+  575:         updatedAt: result.updatedAt || new Date().toISOString(),
+  576:         updatedAtMs: Date.parse(result.updatedAt || new Date().toISOString()) || Date.now(),
+  577:       };
+  578:       renderList();
+  579:       renderDetail();
+  580:       setStatus("Task name updated", "success");
+  581:       loadList({ keepSelection: true }).catch((error) => {
+  582:         setStatus(`Background refresh failed: ${error.message}`, "error");
+  583:       });
+  584:     } catch (error) {
+  585:       setStatus(`Rename failed: ${error.message}`, "error");
+  586:     }
+  587:   }
+  588: 
+  589:   async function openSelectedInOfficial() {
+  590:     if (!state.selectedId) {
+  591:       setStatus("Select a task first", "error");
+  592:       return;
+  593:     }
+  594: 
+  595:     try {

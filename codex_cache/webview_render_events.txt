@@ -1,0 +1,190 @@
+--- media/webview.js:340-395 ---
+  340:             <div class="task-title">${esc(title)}</div>
+  341:             ${snippet}
+  342:           </button>
+  343:         `;
+  344:       })
+  345:       .join("");
+  346:   }
+  347: 
+  348:   function rerenderListPreservingScroll() {
+  349:     if (!els.taskList) {
+  350:       renderList();
+  351:       return;
+  352:     }
+  353: 
+  354:     const previousScrollTop = els.taskList.scrollTop;
+  355:     renderList();
+  356:     els.taskList.scrollTop = previousScrollTop;
+  357:   }
+  358: 
+  359:   function renderDetail() {
+  360:     const task = state.detail?.task;
+  361:     if (!task || task.id !== state.selectedId) {
+  362:       els.emptyState.classList.remove("hidden");
+  363:       els.detailCard.classList.add("hidden");
+  364:       return;
+  365:     }
+  366: 
+  367:     els.emptyState.classList.add("hidden");
+  368:     els.detailCard.classList.remove("hidden");
+  369: 
+  370:     els.detailTitle.textContent = task.title || task.firstUserMessage || task.id;
+  371:     const projectPath = String(task.projectPath || "").trim();
+  372:     els.detailProjectPath.textContent = projectPath;
+  373:     els.detailProjectPath.title = projectPath;
+  374:     els.detailProjectPath.classList.toggle("hidden", !projectPath);
+  375:     els.openTaskBtn.textContent = task.archived ? "Restore" : "Open";
+  376:     els.archiveTaskBtn.classList.toggle("hidden", !!task.archived);
+  377:     els.deleteTaskBtn.classList.toggle("hidden", !task.archived);
+  378:     els.detailId.textContent = task.id;
+  379:     els.detailCwd.textContent = task.cwd || "-";
+  380:     els.detailCwd.title = task.cwd || "";
+  381:     els.detailIdWrap.classList.toggle("hidden", !state.reveal.id);
+  382:     els.detailCwdWrap.classList.toggle("hidden", !state.reveal.cwd);
+  383:     els.detailCreated.textContent = formatTime(task.createdAt);
+  384:     els.detailUpdated.textContent = formatTime(task.updatedAt);
+  385:     els.firstMessage.textContent = task.firstUserMessage || "No first user message";
+  386:     const postForkMessage = String(task.postForkFirstUserMessage || "").trim();
+  387:     els.postForkMessageSection.classList.toggle("hidden", !postForkMessage);
+  388:     els.postForkMessageSection.open = false;
+  389:     els.postForkFirstMessage.textContent = postForkMessage || "";
+  390: 
+  391:     const fork = state.detail?.fork;
+  392:     if (!fork || !fork.id) {
+  393:       els.forkInfo.innerHTML = '<span class="fork-empty">This conversation was not forked</span>';
+  394:       return;
+  395:     }
+--- media/webview.js:720-860 ---
+  720:       }
+  721:       state.search = els.searchInput.value.trim();
+  722:       loadList({ keepSelection: false }).catch((error) => {
+  723:         setStatus(`Search failed: ${error.message}`, "error");
+  724:       });
+  725:     });
+  726: 
+  727:     els.searchFieldSelect.addEventListener("change", () => {
+  728:       state.searchField = els.searchFieldSelect.value || "title";
+  729:       loadList({ keepSelection: false }).catch((error) => {
+  730:         setStatus(`Search field switch failed: ${error.message}`, "error");
+  731:       });
+  732:     });
+  733: 
+  734:     els.taskList.addEventListener("click", (event) => {
+  735:       const item = event.target.closest(".task-item[data-id]");
+  736:       if (!item) {
+  737:         return;
+  738:       }
+  739:       selectTask(item.dataset.id || "").catch((error) => {
+  740:         setStatus(`Load failed: ${error.message}`, "error");
+  741:       });
+  742:     });
+  743: 
+  744:     els.forkInfo.addEventListener("click", (event) => {
+  745:       const showForkIdBtn = event.target.closest(".fork-show-id-btn");
+  746:       if (showForkIdBtn) {
+  747:         state.reveal.forkId = !state.reveal.forkId;
+  748:         renderDetail();
+  749:         return;
+  750:       }
+  751: 
+  752:       const copyForkIdBtn = event.target.closest(".fork-copy-id-btn");
+  753:       if (copyForkIdBtn) {
+  754:         copyText(copyForkIdBtn.dataset.text || "", "Parent ID copied").catch((error) => {
+  755:           setStatus(`Copy failed: ${error.message}`, "error");
+  756:         });
+  757:         return;
+  758:       }
+  759: 
+  760:       const showForkCwdBtn = event.target.closest(".fork-show-cwd-btn");
+  761:       if (showForkCwdBtn) {
+  762:         state.reveal.forkCwd = !state.reveal.forkCwd;
+  763:         renderDetail();
+  764:         return;
+  765:       }
+  766: 
+  767:       const copyForkCwdBtn = event.target.closest(".fork-copy-cwd-btn");
+  768:       if (copyForkCwdBtn) {
+  769:         copyText(copyForkCwdBtn.dataset.text || "", "Parent CWD copied").catch((error) => {
+  770:           setStatus(`Copy failed: ${error.message}`, "error");
+  771:         });
+  772:         return;
+  773:       }
+  774: 
+  775:       const target = event.target.closest(".fork-link[data-id]");
+  776:       if (!target) {
+  777:         return;
+  778:       }
+  779:       const forkArchived = String(target.dataset.archived || "").trim() === "true";
+  780:       navigateToFork(target.dataset.id || "", forkArchived).catch((error) => {
+  781:         setStatus(`Parent load failed: ${error.message}`, "error");
+  782:       });
+  783:     });
+  784: 
+  785:     els.showIdBtn.addEventListener("click", () => {
+  786:       state.reveal.id = !state.reveal.id;
+  787:       renderDetail();
+  788:     });
+  789: 
+  790:     els.openTaskBtn.addEventListener("click", () => {
+  791:       if (state.detail?.task?.archived) {
+  792:         restoreSelected().catch((error) => {
+  793:           setStatus(`Restore failed: ${error.message}`, "error");
+  794:         });
+  795:         return;
+  796:       }
+  797:       openSelectedInOfficial().catch((error) => {
+  798:         setStatus(`Open failed: ${error.message}`, "error");
+  799:       });
+  800:     });
+  801: 
+  802:     els.archiveTaskBtn.addEventListener("click", () => {
+  803:       archiveSelected().catch((error) => {
+  804:         setStatus(`Archive failed: ${error.message}`, "error");
+  805:       });
+  806:     });
+  807: 
+  808:     els.deleteTaskBtn.addEventListener("click", () => {
+  809:       deleteSelected().catch((error) => {
+  810:         setStatus(`Delete failed: ${error.message}`, "error");
+  811:       });
+  812:     });
+  813: 
+  814:     els.showCwdBtn.addEventListener("click", () => {
+  815:       state.reveal.cwd = !state.reveal.cwd;
+  816:       renderDetail();
+  817:     });
+  818: 
+  819:     els.copyIdBtn.addEventListener("click", () => {
+  820:       copyText(state.detail?.task?.id || "", "Session ID copied").catch((error) => {
+  821:         setStatus(`Copy failed: ${error.message}`, "error");
+  822:       });
+  823:     });
+  824: 
+  825:     els.copyCwdBtn.addEventListener("click", () => {
+  826:       copyText(state.detail?.task?.cwd || "", "Session CWD copied").catch((error) => {
+  827:         setStatus(`Copy failed: ${error.message}`, "error");
+  828:       });
+  829:     });
+  830: 
+  831:     els.renameBtn.addEventListener("click", renameSelected);
+  832:   }
+  833: 
+  834:   async function init() {
+  835:     bindEvents();
+  836:     applyLayout();
+  837:     renderScope();
+  838:     try {
+  839:       await refreshAll({ keepSelection: false, preserveState: false });
+  840:     } catch (error) {
+  841:       state.loading = false;
+  842:       renderList();
+  843:       renderDetail();
+  844:       setStatus(`Load failed: ${error.message}`, "error");
+  845:       els.scopeHint.textContent = "Load failed. Check the Codex data directory or VS Code version.";
+  846:       els.listSummary.textContent = "Failed to load tasks";
+  847:     }
+  848:   }
+  849: 
+  850:   init();
+  851: })();

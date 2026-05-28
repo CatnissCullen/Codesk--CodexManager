@@ -1,0 +1,53 @@
+55:        event.affectsConfiguration("codesk.codexHome") ||
+193:    codexHome: String(cfg.get("codexHome") || "").trim(),
+225:  const codexHome = resolveCodexHome(config.codexHome);
+228:    codexHome,
+229:    dbPath: path.join(codexHome, "state_5.sqlite"),
+230:    sessionIndexPath: path.join(codexHome, "session_index.jsonl"),
+262:    codexHome: paths.codexHome,
+267:    sqliteAvailable: canLoadSqlite(),
+282:    const sqlite = require("node:sqlite");
+283:    if (!sqlite?.DatabaseSync) {
+284:      throw new Error("node:sqlite does not expose DatabaseSync.");
+286:    return sqlite;
+289:      `VS Code runtime does not support node:sqlite (${error?.message || error}). Please use a newer VS Code build.`,
+297:    throw new Error(`Codex sqlite database not found: ${dbPath}`);
+300:  const sqlite = getSqliteModule();
+301:  const db = new sqlite.DatabaseSync(dbPath, { readOnly });
+481:  const { codexHome } = getCodexPaths();
+483:  const rolloutPath = resolveExistingRolloutPath(codexHome, rawRolloutPath);
+769:function getSessionIndexNames(indexPath) {
+770:  const cleanPath = String(indexPath || "").trim();
+832:      nextStoredPath: toStoredRolloutPath(paths.codexHome, task.rolloutPath),
+934:    codexHome: paths.codexHome,
+1061:    syncStoredRolloutPathIfNeeded(db, paths.codexHome, task.id, task.rawRolloutPath, task.rolloutPath);
+1131:    rolloutPath = resolveExistingRolloutPath(paths.codexHome, row.rollout_path || "");
+1133:      syncStoredRolloutPathIfNeeded(db, paths.codexHome, cleanId, previousStoredRolloutPath, rolloutPath);
+1248:async function updateSessionIndex(indexPath, id, title, updatedAtSec) {
+1249:  const dir = path.dirname(indexPath);
+1252:  const content = await readTextFileIfExists(indexPath);
+1281:  await writeAtomicTextFile(indexPath, `${output.join(os.EOL)}${os.EOL}`);
+1282:  sessionIndexCache.delete(normalizePathForCompare(indexPath) || indexPath);
+1417:async function removeSessionIndexEntry(indexPath, id) {
+1418:  const content = await readTextFileIfExists(indexPath);
+1441:  await writeAtomicTextFile(indexPath, nextContent);
+1442:  sessionIndexCache.delete(normalizePathForCompare(indexPath) || indexPath);
+1510:function resolveExistingRolloutPath(codexHome, rolloutPath) {
+1520:    candidates.push(path.join(codexHome, normalized));
+1525:    candidates.push(path.join(codexHome, "archived_sessions", basename));
+1526:    candidates.push(path.join(codexHome, "sessions", basename.slice(8, 12), basename.slice(13, 15), basename.slice(16, 18), basename));
+1537:function toStoredRolloutPath(codexHome, absolutePath) {
+1543:  const relative = path.relative(codexHome, cleanPath);
+1551:function syncStoredRolloutPathIfNeeded(db, codexHome, id, storedPath, absolutePath) {
+1552:  const desiredStoredPath = toStoredRolloutPath(codexHome, absolutePath);
+1562:function buildActiveRolloutPath(codexHome, rolloutPath) {
+1575:  return path.join(codexHome, "sessions", year, month, day, basename);
+1578:function buildArchivedRolloutPath(codexHome, rolloutPath) {
+1583:  return path.join(codexHome, "archived_sessions", basename);
+1629:    fromPath = resolveExistingRolloutPath(paths.codexHome, row.rollout_path || "");
+1635:      ? buildArchivedRolloutPath(paths.codexHome, row.rollout_path || fromPath)
+1636:      : buildActiveRolloutPath(paths.codexHome, row.rollout_path || fromPath);
+1639:    const storedPath = toStoredRolloutPath(paths.codexHome, targetPath);
+1746:          rolloutPath = resolveExistingRolloutPath(paths.codexHome, row.rollout_path || "");
+1749:            const codexRoot = normalizePathForCompare(paths.codexHome);
+1758:          progress.report({ message: "Updating sqlite index..." });

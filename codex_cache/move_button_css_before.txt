@@ -1,0 +1,16 @@
+--- media/webview.css:188-202 ---
+  188:   border-color: #ffffff;
+  189: }
+  190: 
+  191: .rename-btn {
+  192:   font-weight: 700;
+  193: }
+  194: 
+  195: .move-btn {
+  196:   font-weight: 600;
+  197: }
+  198: 
+  199: .btn.danger {
+  200:   color: #ffd8d4;
+  201:   background: color-mix(in srgb, #6b201a 68%, var(--panel));
+  202:   border-color: color-mix(in srgb, #8e3027 80%, var(--line-strong));

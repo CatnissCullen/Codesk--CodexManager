@@ -1,0 +1,46 @@
+16:const sessionIndexCache = new Map();
+129:        return archiveTask(payload || {});
+131:        return restoreTask(payload || {});
+133:        return deleteTask(payload || {});
+180:    const result = await renameTask(id, nextTitle);
+230:    sessionIndexPath: path.join(codexHome, "session_index.jsonl"),
+482:  const rawRolloutPath = row.rollout_path || "";
+772:    sessionIndexCache.delete(cleanPath);
+778:  const cached = sessionIndexCache.get(cacheKey);
+802:  sessionIndexCache.set(cacheKey, {
+811:  const { sessionIndexPath } = getCodexPaths();
+812:  const sessionNames = getSessionIndexNames(sessionIndexPath);
+818:      `SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived
+844:      dbRun(db, "UPDATE threads SET rollout_path = ? WHERE id = ?", [item.nextStoredPath, item.id]);
+957:  const { sessionIndexPath } = getCodexPaths();
+958:  const sessionNames = getSessionIndexNames(sessionIndexPath);
+964:      `SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived
+1037:  const { sessionIndexPath } = getCodexPaths();
+1038:  const sessionNames = getSessionIndexNames(sessionIndexPath);
+1044:      `SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived
+1101:async function renameTask(id, titleValue) {
+1121:      "SELECT id, title, updated_at, updated_at_ms, rollout_path FROM threads WHERE id = ?",
+1130:    previousStoredRolloutPath = String(row.rollout_path || "");
+1131:    rolloutPath = resolveExistingRolloutPath(paths.codexHome, row.rollout_path || "");
+1145:    dbRun(db, "UPDATE threads SET title = ?, updated_at = ?, updated_at_ms = ? WHERE id = ?", [
+1157:    await updateSessionIndex(paths.sessionIndexPath, cleanId, title, updatedAtSec);
+1174:        "UPDATE threads SET title = ?, updated_at = ?, updated_at_ms = ?, rollout_path = ? WHERE id = ?",
+1282:  sessionIndexCache.delete(normalizePathForCompare(indexPath) || indexPath);
+1442:  sessionIndexCache.delete(normalizePathForCompare(indexPath) || indexPath);
+1558:  dbRun(db, "UPDATE threads SET rollout_path = ? WHERE id = ?", [desiredStoredPath, id]);
+1618:    row = dbGet(db, "SELECT id, archived, rollout_path FROM threads WHERE id = ?", [cleanId]);
+1622:    previousStoredPath = String(row.rollout_path || "");
+1629:    fromPath = resolveExistingRolloutPath(paths.codexHome, row.rollout_path || "");
+1635:      ? buildArchivedRolloutPath(paths.codexHome, row.rollout_path || fromPath)
+1636:      : buildActiveRolloutPath(paths.codexHome, row.rollout_path || fromPath);
+1640:    dbRun(db, "UPDATE threads SET archived = ?, rollout_path = ?, updated_at = ? WHERE id = ?", [
+1658:        dbRun(db, "UPDATE threads SET rollout_path = ? WHERE id = ?", [previousStoredPath, cleanId]);
+1669:async function archiveTask(payload) {
+1673:async function restoreTask(payload) {
+1703:async function deleteTask(payload) {
+1728:        const originalSessionIndexContent = await readTextFileIfExists(paths.sessionIndexPath);
+1736:            "SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived FROM threads WHERE id = ?",
+1746:          rolloutPath = resolveExistingRolloutPath(paths.codexHome, row.rollout_path || "");
+1756:          await removeSessionIndexEntry(paths.sessionIndexPath, id);
+1759:          dbRun(db, "DELETE FROM threads WHERE id = ?", [id]);
+1770:            await writeAtomicTextFile(paths.sessionIndexPath, originalSessionIndexContent);

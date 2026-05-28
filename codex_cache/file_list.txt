@@ -1,0 +1,9 @@
+.\README.md
+.\package.json
+.\package-lock.json
+.\extension.js
+.\LICENSE
+.\media\webview.js
+.\media\webview.css
+.\media\img.jpg
+.\media\icon.svg

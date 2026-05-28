@@ -1,0 +1,132 @@
+--- extension.js:1285-1415 ---
+ 1285: async function updateRolloutSessionMeta(rolloutPath, id, title, updatedAtMs) {
+ 1286:   const cleanPath = String(rolloutPath || "").trim();
+ 1287:   if (!cleanPath || !fs.existsSync(cleanPath)) {
+ 1288:     return;
+ 1289:   }
+ 1290: 
+ 1291:   const content = await readTextFileIfExists(cleanPath);
+ 1292:   if (!content) {
+ 1293:     return;
+ 1294:   }
+ 1295: 
+ 1296:   const lines = content.split(/\r?\n/);
+ 1297:   let changed = false;
+ 1298:   let sawSessionMeta = false;
+ 1299:   let sawRenameEvent = false;
+ 1300:   const updatedAtIso = new Date(updatedAtMs).toISOString();
+ 1301:   const output = lines.map((line) => {
+ 1302:     if (!line.trim()) {
+ 1303:       return line;
+ 1304:     }
+ 1305: 
+ 1306:     try {
+ 1307:       const entry = JSON.parse(line);
+ 1308:       const isSessionMeta = entry?.type === "session_meta";
+ 1309:       const metaId = String(entry?.payload?.id || "").trim();
+ 1310:       if (!isSessionMeta || metaId !== id) {
+ 1311:         return line;
+ 1312:       }
+ 1313: 
+ 1314:       sawSessionMeta = true;
+ 1315:       entry.timestamp = updatedAtIso;
+ 1316:       entry.payload = {
+ 1317:         ...entry.payload,
+ 1318:         title,
+ 1319:         thread_name: title,
+ 1320:         title_override: title,
+ 1321:         updated_at: updatedAtIso,
+ 1322:         updated_at_ms: updatedAtMs,
+ 1323:       };
+ 1324:       changed = true;
+ 1325:       return JSON.stringify(entry);
+ 1326: 
+ 1327:       // Unreachable by design.
+ 1328:     } catch {
+ 1329:       return line;
+ 1330:     }
+ 1331:   });
+ 1332: 
+ 1333:   for (let index = 0; index < output.length; index += 1) {
+ 1334:     const line = output[index];
+ 1335:     if (!line || !line.trim()) {
+ 1336:       continue;
+ 1337:     }
+ 1338: 
+ 1339:     try {
+ 1340:       const entry = JSON.parse(line);
+ 1341:       const payload = entry?.payload;
+ 1342:       const payloadType = String(payload?.type || "").trim();
+ 1343:       const renameThreadId = String(payload?.thread_id || payload?.id || "").trim();
+ 1344:       const isRenameEvent =
+ 1345:         entry?.type === "event_msg" &&
+ 1346:         (payloadType === "thread_name_updated" || payloadType === "thread/name/updated") &&
+ 1347:         renameThreadId === id;
+ 1348: 
+ 1349:       if (!isRenameEvent) {
+ 1350:         continue;
+ 1351:       }
+ 1352: 
+ 1353:       sawRenameEvent = true;
+ 1354:       entry.timestamp = updatedAtIso;
+ 1355:       entry.payload = {
+ 1356:         ...payload,
+ 1357:         type: payloadType || "thread_name_updated",
+ 1358:         thread_id: id,
+ 1359:         thread_name: title,
+ 1360:         title,
+ 1361:         updated_at: updatedAtIso,
+ 1362:         updated_at_ms: updatedAtMs,
+ 1363:       };
+ 1364:       output[index] = JSON.stringify(entry);
+ 1365:       changed = true;
+ 1366:     } catch {
+ 1367:       // Keep malformed lines untouched.
+ 1368:     }
+ 1369:   }
+ 1370: 
+ 1371:   if (!sawSessionMeta) {
+ 1372:     return;
+ 1373:   }
+ 1374: 
+ 1375:   if (!sawRenameEvent) {
+ 1376:     output.push(
+ 1377:       JSON.stringify({
+ 1378:         timestamp: updatedAtIso,
+ 1379:         type: "event_msg",
+ 1380:         payload: {
+ 1381:           type: "thread_name_updated",
+ 1382:           thread_id: id,
+ 1383:           thread_name: title,
+ 1384:           title,
+ 1385:           updated_at: updatedAtIso,
+ 1386:           updated_at_ms: updatedAtMs,
+ 1387:         },
+ 1388:       }),
+ 1389:     );
+ 1390:     changed = true;
+ 1391:   }
+ 1392: 
+ 1393:   if (changed) {
+ 1394:     await writeAtomicTextFile(cleanPath, `${output.join(os.EOL)}${os.EOL}`);
+ 1395:     invalidateConversationSearchCache(cleanPath);
+ 1396:   }
+ 1397: }
+ 1398: 
+ 1399: function readFirstUserMessageFromRollout(filePath) {
+ 1400:   return getRolloutAnalysis(filePath).firstUserMessage || "";
+ 1401: }
+ 1402: 
+ 1403: function readPostForkFirstUserMessageFromRollout(filePath) {
+ 1404:   return getRolloutAnalysis(filePath).postForkFirstUserMessage || "";
+ 1405: }
+ 1406: 
+ 1407: function isFileBusyError(error) {
+ 1408:   const code = String(error?.code || "").trim().toUpperCase();
+ 1409:   if (code === "EPERM" || code === "EBUSY" || code === "EACCES") {
+ 1410:     return true;
+ 1411:   }
+ 1412: 
+ 1413:   const message = String(error?.message || "").toLowerCase();
+ 1414:   return message.includes("operation not permitted") || message.includes("resource busy") || message.includes("used by another process");
+ 1415: }

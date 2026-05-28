@@ -1,0 +1,44 @@
+--- media/webview.css:184-198 ---
+  184: 
+  185: .btn.primary {
+  186:   color: #000000;
+  187:   background: #ffffff;
+  188:   border-color: #ffffff;
+  189: }
+  190: 
+  191: .rename-btn {
+  192:   font-weight: 700;
+  193: }
+  194: 
+  195: .btn.danger {
+  196:   color: #ffd8d4;
+  197:   background: color-mix(in srgb, #6b201a 68%, var(--panel));
+  198:   border-color: color-mix(in srgb, #8e3027 80%, var(--line-strong));
+--- media/webview.css:448-474 ---
+  448: 
+  449: .detail-head {
+  450:   display: flex;
+  451:   justify-content: space-between;
+  452:   gap: 10px;
+  453:   align-items: flex-start;
+  454:   flex-wrap: wrap;
+  455:   min-width: 0;
+  456: }
+  457: 
+  458: .detail-title-wrap {
+  459:   min-width: 0;
+  460:   flex: 1 1 0;
+  461: }
+  462: 
+  463: .detail-title {
+  464:   margin: 0;
+  465:   font-size: 18px;
+  466:   line-height: 1.25;
+  467:   word-break: break-word;
+  468: }
+  469: 
+  470: .detail-project-path {
+  471:   margin-top: 4px;
+  472:   display: inline-block;
+  473:   max-width: 100%;
+  474:   width: fit-content;

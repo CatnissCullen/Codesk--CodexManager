@@ -1,0 +1,173 @@
+--- extension.js:1-120 ---
+    1: "use strict";
+    2: 
+    3: const vscode = require("vscode");
+    4: const fs = require("fs");
+    5: const fsp = require("fs/promises");
+    6: const os = require("os");
+    7: const path = require("path");
+    8: 
+    9: const VIEW_TYPE = "codesk.main";
+   10: const MAX_TITLE_LENGTH = 120;
+   11: const VALID_SEARCH_FIELDS = new Set(["title", "id", "cwd", "firstUserMessage", "conversation"]);
+   12: const VALID_ARCHIVE_FILTERS = new Set(["active", "archived"]);
+   13: 
+   14: let activeProvider = null;
+   15: const conversationSearchCache = new Map();
+   16: const sessionIndexCache = new Map();
+   17: const rolloutAnalysisCache = new Map();
+   18: 
+   19: function activate(context) {
+   20:   const provider = new TaskManagerViewProvider(context);
+   21:   activeProvider = provider;
+   22: 
+   23:   context.subscriptions.push(
+   24:     vscode.window.registerWebviewViewProvider(VIEW_TYPE, provider, {
+   25:       webviewOptions: { retainContextWhenHidden: true },
+   26:     }),
+   27:   );
+   28: 
+   29:   context.subscriptions.push(
+   30:     vscode.commands.registerCommand("codesk.open", async () => {
+   31:       await vscode.commands.executeCommand("workbench.view.extension.codesk");
+   32:       provider.refreshVisibleViews();
+   33:     }),
+   34:   );
+   35: 
+   36:   context.subscriptions.push(
+   37:     vscode.commands.registerCommand("codesk.refresh", () => {
+   38:       provider.refreshVisibleViews();
+   39:     }),
+   40:   );
+   41: 
+   42:   context.subscriptions.push(
+   43:     vscode.commands.registerCommand("codesk.renameTask", async () => {
+   44:       await provider.renameSelectedTask();
+   45:     }),
+   46:   );
+   47: 
+   48:   context.subscriptions.push(
+   49:     vscode.workspace.onDidChangeWorkspaceFolders(() => provider.refreshVisibleViews()),
+   50:   );
+   51: 
+   52:   context.subscriptions.push(
+   53:     vscode.workspace.onDidChangeConfiguration((event) => {
+   54:       if (
+   55:         event.affectsConfiguration("codesk.codexHome") ||
+   56:         event.affectsConfiguration("codesk.defaultScope")
+   57:       ) {
+   58:         provider.refreshVisibleViews();
+   59:       }
+   60:     }),
+   61:   );
+   62: }
+   63: 
+   64: function deactivate() {
+   65:   activeProvider = null;
+   66: }
+   67: 
+   68: class TaskManagerViewProvider {
+   69:   constructor(context) {
+   70:     this.context = context;
+   71:     this.views = new Set();
+   72:     this.selectedId = "";
+   73:     this.lastScope = "";
+   74:   }
+   75: 
+   76:   resolveWebviewView(webviewView) {
+   77:     this.views.add(webviewView);
+   78:     webviewView.onDidDispose(() => this.views.delete(webviewView));
+   79: 
+   80:     const webview = webviewView.webview;
+   81:     webview.options = {
+   82:       enableScripts: true,
+   83:       localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, "media")],
+   84:     };
+   85:     webview.html = getWebviewHtml(webview, this.context.extensionUri);
+   86: 
+   87:     webview.onDidReceiveMessage(async (message) => {
+   88:       if (!message || typeof message !== "object") {
+   89:         return;
+   90:       }
+   91: 
+   92:       const id = message.id;
+   93:       const op = message.op;
+   94:       const payload = message.payload || {};
+   95:       if (!id || !op) {
+   96:         return;
+   97:       }
+   98: 
+   99:       try {
+  100:         const data = await this.handleOperation(op, payload);
+  101:         webview.postMessage({ id, ok: true, data });
+  102:       } catch (error) {
+  103:         webview.postMessage({
+  104:           id,
+  105:           ok: false,
+  106:           error: error?.message || String(error),
+  107:         });
+  108:       }
+  109:     });
+  110:   }
+  111: 
+  112:   async handleOperation(op, payload) {
+  113:     switch (op) {
+  114:       case "bootstrap":
+  115:         return getBootstrapInfo();
+  116:       case "listTasks":
+  117:         return listTasks(payload || {});
+  118:       case "getTaskDetail":
+  119:         return getTaskDetail(payload || {});
+  120:       case "setSelectedTask":
+--- extension.js:1195-1245 ---
+ 1195:     });
+ 1196:   }, 150);
+ 1197: 
+ 1198:   return {
+ 1199:     id: cleanId,
+ 1200:     title,
+ 1201:     updatedAt: toIso(updatedAtSec),
+ 1202:     updatedAtSec,
+ 1203:     rolloutSyncPending,
+ 1204:   };
+ 1205: }
+ 1206: 
+ 1207: async function flushFile(filePath) {
+ 1208:   if (process.platform === "win32") {
+ 1209:     return;
+ 1210:   }
+ 1211: 
+ 1212:   let handle;
+ 1213:   try {
+ 1214:     handle = await fsp.open(filePath, "r+");
+ 1215:     await handle.sync();
+ 1216:   } catch (error) {
+ 1217:     const code = String(error?.code || "").trim().toUpperCase();
+ 1218:     if (code === "EPERM" || code === "EINVAL" || code === "ENOTSUP" || code === "EBADF") {
+ 1219:       return;
+ 1220:     }
+ 1221:     throw error;
+ 1222:   } finally {
+ 1223:     await handle?.close();
+ 1224:   }
+ 1225: }
+ 1226: 
+ 1227: async function writeAtomicTextFile(filePath, content) {
+ 1228:   const dir = path.dirname(filePath);
+ 1229:   await fsp.mkdir(dir, { recursive: true });
+ 1230: 
+ 1231:   const tmpPath = `${filePath}.tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+ 1232:   await fsp.writeFile(tmpPath, content, "utf8");
+ 1233:   await fsp.rename(tmpPath, filePath);
+ 1234:   await flushFile(filePath);
+ 1235: }
+ 1236: 
+ 1237: async function readTextFileIfExists(filePath) {
+ 1238:   try {
+ 1239:     return await fsp.readFile(filePath, "utf8");
+ 1240:   } catch (error) {
+ 1241:     if (error?.code === "ENOENT") {
+ 1242:       return "";
+ 1243:     }
+ 1244:     throw error;
+ 1245:   }

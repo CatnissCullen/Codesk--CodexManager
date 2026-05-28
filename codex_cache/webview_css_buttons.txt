@@ -1,0 +1,288 @@
+--- media/webview.css:129-145 ---
+  129:   gap: 6px;
+  130:   align-items: center;
+  131:   flex: 0 1 auto;
+  132:   min-width: 0;
+  133: }
+  134: 
+  135: .scope-btn,
+  136: .btn {
+  137:   border: 1px solid var(--line-strong);
+  138:   border-radius: 7px;
+  139:   color: var(--text);
+  140:   background: var(--panel-strong);
+  141:   cursor: pointer;
+  142:   max-width: 100%;
+  143:   min-width: 0;
+  144:   white-space: normal;
+  145:   overflow-wrap: anywhere;
+--- media/webview.css:130-146 ---
+  130:   align-items: center;
+  131:   flex: 0 1 auto;
+  132:   min-width: 0;
+  133: }
+  134: 
+  135: .scope-btn,
+  136: .btn {
+  137:   border: 1px solid var(--line-strong);
+  138:   border-radius: 7px;
+  139:   color: var(--text);
+  140:   background: var(--panel-strong);
+  141:   cursor: pointer;
+  142:   max-width: 100%;
+  143:   min-width: 0;
+  144:   white-space: normal;
+  145:   overflow-wrap: anywhere;
+  146:   word-break: break-word;
+--- media/webview.css:145-161 ---
+  145:   overflow-wrap: anywhere;
+  146:   word-break: break-word;
+  147:   text-align: center;
+  148:   line-height: 1.25;
+  149: }
+  150: 
+  151: .scope-btn {
+  152:   min-height: 30px;
+  153:   font-weight: 650;
+  154:   width: fit-content;
+  155:   flex: 0 0 auto;
+  156:   padding: 6px 12px;
+  157: }
+  158: 
+  159: #refreshBtn {
+  160:   flex: 0 0 auto;
+  161: }
+--- media/webview.css:153-169 ---
+  153:   font-weight: 650;
+  154:   width: fit-content;
+  155:   flex: 0 0 auto;
+  156:   padding: 6px 12px;
+  157: }
+  158: 
+  159: #refreshBtn {
+  160:   flex: 0 0 auto;
+  161: }
+  162: 
+  163: .scope-btn:hover,
+  164: .btn:hover {
+  165:   border-color: var(--accent-strong);
+  166: }
+  167: 
+  168: .scope-btn.is-active {
+  169:   color: #000000;
+--- media/webview.css:157-173 ---
+  157: }
+  158: 
+  159: #refreshBtn {
+  160:   flex: 0 0 auto;
+  161: }
+  162: 
+  163: .scope-btn:hover,
+  164: .btn:hover {
+  165:   border-color: var(--accent-strong);
+  166: }
+  167: 
+  168: .scope-btn.is-active {
+  169:   color: #000000;
+  170:   border-color: #ffffff;
+  171:   background: #ffffff;
+  172: }
+  173: 
+--- media/webview.css:158-174 ---
+  158: 
+  159: #refreshBtn {
+  160:   flex: 0 0 auto;
+  161: }
+  162: 
+  163: .scope-btn:hover,
+  164: .btn:hover {
+  165:   border-color: var(--accent-strong);
+  166: }
+  167: 
+  168: .scope-btn.is-active {
+  169:   color: #000000;
+  170:   border-color: #ffffff;
+  171:   background: #ffffff;
+  172: }
+  173: 
+  174: .btn {
+--- media/webview.css:162-178 ---
+  162: 
+  163: .scope-btn:hover,
+  164: .btn:hover {
+  165:   border-color: var(--accent-strong);
+  166: }
+  167: 
+  168: .scope-btn.is-active {
+  169:   color: #000000;
+  170:   border-color: #ffffff;
+  171:   background: #ffffff;
+  172: }
+  173: 
+  174: .btn {
+  175:   min-height: 28px;
+  176:   padding: 4px 9px;
+  177: }
+  178: 
+--- media/webview.css:168-184 ---
+  168: .scope-btn.is-active {
+  169:   color: #000000;
+  170:   border-color: #ffffff;
+  171:   background: #ffffff;
+  172: }
+  173: 
+  174: .btn {
+  175:   min-height: 28px;
+  176:   padding: 4px 9px;
+  177: }
+  178: 
+  179: .btn.mini {
+  180:   min-height: 24px;
+  181:   padding: 3px 8px;
+  182:   font-size: 11px;
+  183: }
+  184: 
+--- media/webview.css:173-189 ---
+  173: 
+  174: .btn {
+  175:   min-height: 28px;
+  176:   padding: 4px 9px;
+  177: }
+  178: 
+  179: .btn.mini {
+  180:   min-height: 24px;
+  181:   padding: 3px 8px;
+  182:   font-size: 11px;
+  183: }
+  184: 
+  185: .btn.primary {
+  186:   color: #000000;
+  187:   background: #ffffff;
+  188:   border-color: #ffffff;
+  189: }
+--- media/webview.css:179-195 ---
+  179: .btn.mini {
+  180:   min-height: 24px;
+  181:   padding: 3px 8px;
+  182:   font-size: 11px;
+  183: }
+  184: 
+  185: .btn.primary {
+  186:   color: #000000;
+  187:   background: #ffffff;
+  188:   border-color: #ffffff;
+  189: }
+  190: 
+  191: .rename-btn {
+  192:   font-weight: 700;
+  193: }
+  194: 
+  195: .btn.danger {
+--- media/webview.css:185-201 ---
+  185: .btn.primary {
+  186:   color: #000000;
+  187:   background: #ffffff;
+  188:   border-color: #ffffff;
+  189: }
+  190: 
+  191: .rename-btn {
+  192:   font-weight: 700;
+  193: }
+  194: 
+  195: .btn.danger {
+  196:   color: #ffd8d4;
+  197:   background: color-mix(in srgb, #6b201a 68%, var(--panel));
+  198:   border-color: color-mix(in srgb, #8e3027 80%, var(--line-strong));
+  199: }
+  200: 
+  201: .btn.danger:hover {
+--- media/webview.css:189-205 ---
+  189: }
+  190: 
+  191: .rename-btn {
+  192:   font-weight: 700;
+  193: }
+  194: 
+  195: .btn.danger {
+  196:   color: #ffd8d4;
+  197:   background: color-mix(in srgb, #6b201a 68%, var(--panel));
+  198:   border-color: color-mix(in srgb, #8e3027 80%, var(--line-strong));
+  199: }
+  200: 
+  201: .btn.danger:hover {
+  202:   border-color: color-mix(in srgb, #b44b40 82%, #ffffff 18%);
+  203: }
+  204: 
+  205: .search {
+--- media/webview.css:195-211 ---
+  195: .btn.danger {
+  196:   color: #ffd8d4;
+  197:   background: color-mix(in srgb, #6b201a 68%, var(--panel));
+  198:   border-color: color-mix(in srgb, #8e3027 80%, var(--line-strong));
+  199: }
+  200: 
+  201: .btn.danger:hover {
+  202:   border-color: color-mix(in srgb, #b44b40 82%, #ffffff 18%);
+  203: }
+  204: 
+  205: .search {
+  206:   width: auto;
+  207:   flex: 1 1 auto;
+  208:   min-width: 0;
+  209:   border: 1px solid var(--line-strong);
+  210:   border-radius: 7px;
+  211:   padding: 7px 8px;
+--- media/webview.css:305-321 ---
+  305:       rgba(159, 179, 255, 0.95) 18px,
+  306:       transparent 18px,
+  307:       transparent 100%
+  308:     );
+  309: }
+  310: 
+  311: .splitter-swap-btn {
+  312:   position: relative;
+  313:   z-index: 1;
+  314:   width: 20px;
+  315:   min-width: 20px;
+  316:   height: 20px;
+  317:   border: 1px solid #ffffff;
+  318:   border-radius: 7px;
+  319:   padding: 0;
+  320:   color: #0d1638;
+  321:   background: #9fb3ff;
+--- media/webview.css:322-338 ---
+  322:   font: inherit;
+  323:   font-weight: 900;
+  324:   line-height: 1;
+  325:   cursor: pointer;
+  326: }
+  327: 
+  328: .splitter-swap-btn:hover {
+  329:   border-color: #c6d3ff;
+  330:   background: #b6c6ff;
+  331: }
+  332: 
+  333: .list-summary {
+  334:   padding: 7px 8px;
+  335:   border-bottom: 1px solid var(--line);
+  336:   color: var(--muted);
+  337:   font-size: 11px;
+  338: }
+--- media/webview.css:518-534 ---
+  518:   gap: 8px;
+  519:   flex-wrap: wrap;
+  520:   flex: 0 1 auto;
+  521:   min-width: 0;
+  522: }
+  523: 
+  524: .fork-meta-row > .btn,
+  525: .fork-link {
+  526:   flex: 0 1 auto;
+  527:   min-width: 0;
+  528:   max-width: 100%;
+  529: }
+  530: 
+  531: .reveal-output {
+  532:   display: inline-flex;
+  533:   align-items: center;
+  534:   gap: 8px;

@@ -1,0 +1,144 @@
+--- media/webview.js:545-635 ---
+  545:     await selectTask(id, { scrollListToCenter: true });
+  546:   }
+  547: 
+  548:   async function renameSelected() {
+  549:     if (!state.selectedId) {
+  550:       setStatus("Select a task first", "error");
+  551:       return;
+  552:     }
+  553: 
+  554:     try {
+  555:       const result = await rpc("promptRenameTask", { id: state.selectedId });
+  556:       if (result?.cancelled) {
+  557:         setStatus("Rename cancelled");
+  558:         return;
+  559:       }
+  560:       if (result?.unchanged) {
+  561:         setStatus("Name unchanged");
+  562:         return;
+  563:       }
+  564:       if (state.detail?.task?.id === state.selectedId) {
+  565:         state.detail.task.title = result.title;
+  566:         state.detail.task.updatedAt = result.updatedAt || state.detail.task.updatedAt;
+  567:       }
+  568:       const item = state.items.find((entry) => entry.id === state.selectedId);
+  569:       if (item) {
+  570:         item.title = result.title;
+  571:         item.updatedAt = result.updatedAt || item.updatedAt;
+  572:       }
+  573:       state.optimisticRename = {
+  574:         id: state.selectedId,
+  575:         title: result.title,
+  576:         updatedAt: result.updatedAt || new Date().toISOString(),
+  577:         updatedAtMs: Date.parse(result.updatedAt || new Date().toISOString()) || Date.now(),
+  578:       };
+  579:       renderList();
+  580:       renderDetail();
+  581:       setStatus("Task name updated", "success");
+  582:       loadList({ keepSelection: true }).catch((error) => {
+  583:         setStatus(`Background refresh failed: ${error.message}`, "error");
+  584:       });
+  585:     } catch (error) {
+  586:       setStatus(`Rename failed: ${error.message}`, "error");
+  587:     }
+  588:   }
+  589: 
+  590:   async function moveSelected() {
+  591:     if (!state.selectedId) {
+  592:       setStatus("Select a task first", "error");
+  593:       return;
+  594:     }
+  595: 
+  596:     try {
+  597:       const result = await rpc("promptMoveTask", { id: state.selectedId });
+  598:       if (result?.cancelled) {
+  599:         setStatus("Move cancelled");
+  600:         return;
+  601:       }
+  602:       if (result?.unchanged) {
+  603:         setStatus("Project path unchanged");
+  604:         return;
+  605:       }
+  606:       if (state.detail?.task?.id === state.selectedId) {
+  607:         state.detail.task.cwd = result.cwd;
+  608:         state.detail.task.projectPath = result.projectPath;
+  609:         state.detail.task.updatedAt = result.updatedAt || state.detail.task.updatedAt;
+  610:       }
+  611:       const item = state.items.find((entry) => entry.id === state.selectedId);
+  612:       if (item) {
+  613:         item.cwd = result.cwd;
+  614:         item.projectPath = result.projectPath;
+  615:         item.updatedAt = result.updatedAt || item.updatedAt;
+  616:       }
+  617:       renderList();
+  618:       renderDetail();
+  619:       setStatus("Task project updated", "success");
+  620:       loadList({ keepSelection: true }).catch((error) => {
+  621:         setStatus(`Background refresh failed: ${error.message}`, "error");
+  622:       });
+  623:     } catch (error) {
+  624:       setStatus(`Move failed: ${error.message}`, "error");
+  625:     }
+  626:   }
+  627: 
+  628:   async function openSelectedInOfficial() {
+  629:     if (!state.selectedId) {
+  630:       setStatus("Select a task first", "error");
+  631:       return;
+  632:     }
+  633: 
+  634:     try {
+  635:       const result = await rpc("openOfficialTask", { id: state.selectedId });
+--- media/webview.js:825-875 ---
+  825:       state.reveal.id = !state.reveal.id;
+  826:       renderDetail();
+  827:     });
+  828: 
+  829:     els.openTaskBtn.addEventListener("click", () => {
+  830:       if (state.detail?.task?.archived) {
+  831:         restoreSelected().catch((error) => {
+  832:           setStatus(`Restore failed: ${error.message}`, "error");
+  833:         });
+  834:         return;
+  835:       }
+  836:       openSelectedInOfficial().catch((error) => {
+  837:         setStatus(`Open failed: ${error.message}`, "error");
+  838:       });
+  839:     });
+  840: 
+  841:     els.archiveTaskBtn.addEventListener("click", () => {
+  842:       archiveSelected().catch((error) => {
+  843:         setStatus(`Archive failed: ${error.message}`, "error");
+  844:       });
+  845:     });
+  846: 
+  847:     els.deleteTaskBtn.addEventListener("click", () => {
+  848:       deleteSelected().catch((error) => {
+  849:         setStatus(`Delete failed: ${error.message}`, "error");
+  850:       });
+  851:     });
+  852: 
+  853:     els.showCwdBtn.addEventListener("click", () => {
+  854:       state.reveal.cwd = !state.reveal.cwd;
+  855:       renderDetail();
+  856:     });
+  857: 
+  858:     els.copyIdBtn.addEventListener("click", () => {
+  859:       copyText(state.detail?.task?.id || "", "Session ID copied").catch((error) => {
+  860:         setStatus(`Copy failed: ${error.message}`, "error");
+  861:       });
+  862:     });
+  863: 
+  864:     els.copyCwdBtn.addEventListener("click", () => {
+  865:       copyText(state.detail?.task?.cwd || "", "Session CWD copied").catch((error) => {
+  866:         setStatus(`Copy failed: ${error.message}`, "error");
+  867:       });
+  868:     });
+  869: 
+  870:     els.renameBtn.addEventListener("click", renameSelected);
+  871:     els.moveBtn.addEventListener("click", moveSelected);
+  872:   }
+  873: 
+  874:   async function init() {
+  875:     bindEvents();

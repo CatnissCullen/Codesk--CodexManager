@@ -1,0 +1,229 @@
+--- extension.js:1100-1195 ---
+ 1100: 
+ 1101: async function renameTask(id, titleValue) {
+ 1102:   const cleanId = String(id || "").trim();
+ 1103:   const title = String(titleValue || "").trim();
+ 1104:   const validationError = validateTaskTitle(title);
+ 1105:   if (validationError) {
+ 1106:     throw new Error(validationError);
+ 1107:   }
+ 1108: 
+ 1109:   const paths = getCodexPaths();
+ 1110:   const db = openDb(false);
+ 1111:   let previousTitle = "";
+ 1112:   let previousUpdatedAt = 0;
+ 1113:   let previousUpdatedAtMs = 0;
+ 1114:   let previousStoredRolloutPath = "";
+ 1115:   let rolloutPath = "";
+ 1116:   const updatedAtMs = Date.now();
+ 1117:   const updatedAtSec = Math.floor(updatedAtMs / 1000);
+ 1118:   try {
+ 1119:     const row = dbGet(
+ 1120:       db,
+ 1121:       "SELECT id, title, updated_at, updated_at_ms, rollout_path FROM threads WHERE id = ?",
+ 1122:       [cleanId],
+ 1123:     );
+ 1124:     if (!row) {
+ 1125:       throw new Error("Task not found.");
+ 1126:     }
+ 1127:     previousTitle = String(row.title || "");
+ 1128:     previousUpdatedAt = Number(row.updated_at || 0);
+ 1129:     previousUpdatedAtMs = Number(row.updated_at_ms || 0);
+ 1130:     previousStoredRolloutPath = String(row.rollout_path || "");
+ 1131:     rolloutPath = resolveExistingRolloutPath(paths.codexHome, row.rollout_path || "");
+ 1132:     if (rolloutPath) {
+ 1133:       syncStoredRolloutPathIfNeeded(db, paths.codexHome, cleanId, previousStoredRolloutPath, rolloutPath);
+ 1134:     }
+ 1135: 
+ 1136:     if (title === previousTitle.trim()) {
+ 1137:       return {
+ 1138:         id: cleanId,
+ 1139:         title: previousTitle,
+ 1140:         updatedAt: toIso(previousUpdatedAt) || new Date().toISOString(),
+ 1141:         unchanged: true,
+ 1142:       };
+ 1143:     }
+ 1144: 
+ 1145:     dbRun(db, "UPDATE threads SET title = ?, updated_at = ?, updated_at_ms = ? WHERE id = ?", [
+ 1146:       title,
+ 1147:       updatedAtSec,
+ 1148:       updatedAtMs,
+ 1149:       cleanId,
+ 1150:     ]);
+ 1151:   } finally {
+ 1152:     closeDb(db);
+ 1153:   }
+ 1154: 
+ 1155:   let rolloutSyncPending = false;
+ 1156:   try {
+ 1157:     await updateSessionIndex(paths.sessionIndexPath, cleanId, title, updatedAtSec);
+ 1158:     if (rolloutPath) {
+ 1159:       try {
+ 1160:         await updateRolloutSessionMeta(rolloutPath, cleanId, title, updatedAtMs);
+ 1161:       } catch (error) {
+ 1162:         if (isFileBusyError(error)) {
+ 1163:           rolloutSyncPending = true;
+ 1164:         } else {
+ 1165:           throw error;
+ 1166:         }
+ 1167:       }
+ 1168:     }
+ 1169:   } catch (error) {
+ 1170:     const revertDb = openDb(false);
+ 1171:     try {
+ 1172:       dbRun(
+ 1173:         revertDb,
+ 1174:         "UPDATE threads SET title = ?, updated_at = ?, updated_at_ms = ?, rollout_path = ? WHERE id = ?",
+ 1175:         [
+ 1176:           previousTitle,
+ 1177:           previousUpdatedAt,
+ 1178:           previousUpdatedAtMs,
+ 1179:           previousStoredRolloutPath,
+ 1180:           cleanId,
+ 1181:         ],
+ 1182:       );
+ 1183:     } finally {
+ 1184:       closeDb(revertDb);
+ 1185:     }
+ 1186:     throw new Error(`Renaming sync failed, database change was rolled back: ${error?.message || error}`);
+ 1187:   }
+ 1188: 
+ 1189:   vscode.commands.executeCommand("chatgpt.openSidebar").catch(() => {
+ 1190:     // Ignore if the official extension/command is unavailable.
+ 1191:   });
+ 1192:   setTimeout(() => {
+ 1193:     vscode.commands.executeCommand("chatgpt.openSidebar").catch(() => {
+ 1194:       // Ignore if the official extension/command is unavailable.
+ 1195:     });
+--- extension.js:1240-1290 ---
+ 1240:   } catch (error) {
+ 1241:     if (error?.code === "ENOENT") {
+ 1242:       return "";
+ 1243:     }
+ 1244:     throw error;
+ 1245:   }
+ 1246: }
+ 1247: 
+ 1248: async function updateSessionIndex(indexPath, id, title, updatedAtSec) {
+ 1249:   const dir = path.dirname(indexPath);
+ 1250:   await fsp.mkdir(dir, { recursive: true });
+ 1251: 
+ 1252:   const content = await readTextFileIfExists(indexPath);
+ 1253: 
+ 1254:   const lines = content ? content.split(/\r?\n/) : [];
+ 1255:   const output = [];
+ 1256:   let found = false;
+ 1257:   const updatedAt = toIso(updatedAtSec) || new Date().toISOString();
+ 1258: 
+ 1259:   for (const line of lines) {
+ 1260:     if (!line.trim()) {
+ 1261:       continue;
+ 1262:     }
+ 1263: 
+ 1264:     try {
+ 1265:       const entry = JSON.parse(line);
+ 1266:       if (entry?.id === id) {
+ 1267:         entry.thread_name = title;
+ 1268:         entry.updated_at = updatedAt;
+ 1269:         found = true;
+ 1270:       }
+ 1271:       output.push(JSON.stringify(entry));
+ 1272:     } catch {
+ 1273:       output.push(line);
+ 1274:     }
+ 1275:   }
+ 1276: 
+ 1277:   if (!found) {
+ 1278:     output.push(JSON.stringify({ id, thread_name: title, updated_at: updatedAt }));
+ 1279:   }
+ 1280: 
+ 1281:   await writeAtomicTextFile(indexPath, `${output.join(os.EOL)}${os.EOL}`);
+ 1282:   sessionIndexCache.delete(normalizePathForCompare(indexPath) || indexPath);
+ 1283: }
+ 1284: 
+ 1285: async function updateRolloutSessionMeta(rolloutPath, id, title, updatedAtMs) {
+ 1286:   const cleanPath = String(rolloutPath || "").trim();
+ 1287:   if (!cleanPath || !fs.existsSync(cleanPath)) {
+ 1288:     return;
+ 1289:   }
+ 1290: 
+--- extension.js:1590-1668 ---
+ 1590: 
+ 1591:   await fsp.mkdir(path.dirname(toPath), { recursive: true });
+ 1592:   try {
+ 1593:     await fsp.rename(fromPath, toPath);
+ 1594:   } catch (error) {
+ 1595:     if (error?.code === "EXDEV") {
+ 1596:       await fsp.copyFile(fromPath, toPath);
+ 1597:       await fsp.unlink(fromPath);
+ 1598:     } else {
+ 1599:       throw error;
+ 1600:     }
+ 1601:   }
+ 1602:   return toPath;
+ 1603: }
+ 1604: 
+ 1605: async function setTaskArchivedState(id, nextArchived) {
+ 1606:   const cleanId = String(id || "").trim();
+ 1607:   if (!cleanId) {
+ 1608:     throw new Error("Task id is required.");
+ 1609:   }
+ 1610: 
+ 1611:   const paths = getCodexPaths();
+ 1612:   const db = openDb(false);
+ 1613:   let row;
+ 1614:   let fromPath = "";
+ 1615:   let targetPath = "";
+ 1616:   let previousStoredPath = "";
+ 1617:   try {
+ 1618:     row = dbGet(db, "SELECT id, archived, rollout_path FROM threads WHERE id = ?", [cleanId]);
+ 1619:     if (!row) {
+ 1620:       throw new Error("Task not found.");
+ 1621:     }
+ 1622:     previousStoredPath = String(row.rollout_path || "");
+ 1623: 
+ 1624:     const currentArchived = Number(row.archived || 0) === 1;
+ 1625:     if (currentArchived === nextArchived) {
+ 1626:       throw new Error(nextArchived ? "This conversation is already archived." : "This conversation is already active.");
+ 1627:     }
+ 1628: 
+ 1629:     fromPath = resolveExistingRolloutPath(paths.codexHome, row.rollout_path || "");
+ 1630:     if (!fromPath || !fs.existsSync(fromPath)) {
+ 1631:       throw new Error("The rollout file for this conversation was not found, so archive state could not be synced.");
+ 1632:     }
+ 1633: 
+ 1634:     targetPath = nextArchived
+ 1635:       ? buildArchivedRolloutPath(paths.codexHome, row.rollout_path || fromPath)
+ 1636:       : buildActiveRolloutPath(paths.codexHome, row.rollout_path || fromPath);
+ 1637: 
+ 1638:     await moveRolloutFile(fromPath, targetPath);
+ 1639:     const storedPath = toStoredRolloutPath(paths.codexHome, targetPath);
+ 1640:     dbRun(db, "UPDATE threads SET archived = ?, rollout_path = ?, updated_at = ? WHERE id = ?", [
+ 1641:       nextArchived ? 1 : 0,
+ 1642:       storedPath,
+ 1643:       nowSec(),
+ 1644:       cleanId,
+ 1645:     ]);
+ 1646: 
+ 1647:     return { id: cleanId, archived: nextArchived, rolloutPath: targetPath, storedPath };
+ 1648:   } catch (error) {
+ 1649:     if (targetPath && fromPath && fs.existsSync(targetPath) && !fs.existsSync(fromPath)) {
+ 1650:       try {
+ 1651:         await moveRolloutFile(targetPath, fromPath);
+ 1652:       } catch {
+ 1653:         // Keep the original error; caller should resolve manually if rollback also fails.
+ 1654:       }
+ 1655:     }
+ 1656:     if (previousStoredPath) {
+ 1657:       try {
+ 1658:         dbRun(db, "UPDATE threads SET rollout_path = ? WHERE id = ?", [previousStoredPath, cleanId]);
+ 1659:       } catch {
+ 1660:         // Ignore rollback failure here and preserve original error.
+ 1661:       }
+ 1662:     }
+ 1663:     throw error;
+ 1664:   } finally {
+ 1665:     closeDb(db);
+ 1666:   }
+ 1667: }
+ 1668: 

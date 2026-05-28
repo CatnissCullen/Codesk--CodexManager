@@ -69,6 +69,7 @@
     postForkFirstMessage: document.getElementById("postForkFirstMessage"),
     forkInfo: document.getElementById("forkInfo"),
     renameBtn: document.getElementById("renameBtn"),
+    moveBtn: document.getElementById("moveBtn"),
     statusBar: document.getElementById("statusBar"),
   };
 
@@ -586,6 +587,44 @@
     }
   }
 
+  async function moveSelected() {
+    if (!state.selectedId) {
+      setStatus("Select a task first", "error");
+      return;
+    }
+
+    try {
+      const result = await rpc("promptMoveTask", { id: state.selectedId });
+      if (result?.cancelled) {
+        setStatus("Move cancelled");
+        return;
+      }
+      if (result?.unchanged) {
+        setStatus("Project path unchanged");
+        return;
+      }
+      if (state.detail?.task?.id === state.selectedId) {
+        state.detail.task.cwd = result.cwd;
+        state.detail.task.projectPath = result.projectPath;
+        state.detail.task.updatedAt = result.updatedAt || state.detail.task.updatedAt;
+      }
+      const item = state.items.find((entry) => entry.id === state.selectedId);
+      if (item) {
+        item.cwd = result.cwd;
+        item.projectPath = result.projectPath;
+        item.updatedAt = result.updatedAt || item.updatedAt;
+      }
+      renderList();
+      renderDetail();
+      setStatus("Task project updated", "success");
+      loadList({ keepSelection: true }).catch((error) => {
+        setStatus(`Background refresh failed: ${error.message}`, "error");
+      });
+    } catch (error) {
+      setStatus(`Move failed: ${error.message}`, "error");
+    }
+  }
+
   async function openSelectedInOfficial() {
     if (!state.selectedId) {
       setStatus("Select a task first", "error");
@@ -829,6 +868,7 @@
     });
 
     els.renameBtn.addEventListener("click", renameSelected);
+    els.moveBtn.addEventListener("click", moveSelected);
   }
 
   async function init() {

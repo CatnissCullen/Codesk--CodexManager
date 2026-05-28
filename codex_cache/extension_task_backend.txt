@@ -1,0 +1,411 @@
+--- extension.js:380-520 ---
+  380:   }
+  381:   if (inputPath.startsWith("\\\\?\\")) {
+  382:     return inputPath.slice("\\\\?\\".length);
+  383:   }
+  384:   return inputPath;
+  385: }
+  386: 
+  387: function isPathInsideAnyRoot(candidatePath, roots) {
+  388:   const normalized = normalizePathForCompare(candidatePath);
+  389:   if (!normalized || !roots.length) {
+  390:     return false;
+  391:   }
+  392: 
+  393:   return roots.some((root) => {
+  394:     if (normalized === root) {
+  395:       return true;
+  396:     }
+  397:     const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  398:     return normalized.startsWith(prefix);
+  399:   });
+  400: }
+  401: 
+  402: function resolveTaskWorkspacePath(cwd, workspaceInfos = null) {
+  403:   const normalizedCwd = normalizePathForCompare(cwd);
+  404:   const displayCwd = normalizePathForDisplay(cwd);
+  405:   const infos = Array.isArray(workspaceInfos) ? workspaceInfos : getWorkspaceFolderInfos();
+  406:   if (!normalizedCwd) {
+  407:     return {
+  408:       cwd: displayCwd,
+  409:       projectPath: "",
+  410:       remapped: false,
+  411:     };
+  412:   }
+  413: 
+  414:   const directMatch = infos.find((info) => {
+  415:     if (normalizedCwd === info.normalized) {
+  416:       return true;
+  417:     }
+  418:     const prefix = info.normalized.endsWith(path.sep) ? info.normalized : `${info.normalized}${path.sep}`;
+  419:     return normalizedCwd.startsWith(prefix);
+  420:   });
+  421:   if (directMatch) {
+  422:     return {
+  423:       cwd: displayCwd,
+  424:       projectPath: directMatch.actual,
+  425:       remapped: false,
+  426:     };
+  427:   }
+  428: 
+  429:   const cwdSegments = normalizedCwd.split(path.sep).filter(Boolean);
+  430:   let bestMatch = null;
+  431:   for (const info of infos) {
+  432:     if (!info.nameNormalized) {
+  433:       continue;
+  434:     }
+  435:     for (let index = 0; index < cwdSegments.length; index += 1) {
+  436:       if (cwdSegments[index] !== info.nameNormalized) {
+  437:         continue;
+  438:       }
+  439:       const suffixSegments = cwdSegments.slice(index + 1);
+  440:       const candidateActual = normalizePathForDisplay(
+  441:         suffixSegments.length ? path.join(info.actual, ...suffixSegments) : info.actual,
+  442:       );
+  443:       if (!candidateActual) {
+  444:         continue;
+  445:       }
+  446:       const candidateExists = fs.existsSync(candidateActual);
+  447:       const rootExists = fs.existsSync(info.actual);
+  448:       if (!candidateExists && !(rootExists && suffixSegments.length === 0)) {
+  449:         continue;
+  450:       }
+  451:       const score = candidateExists ? 2 : 1;
+  452:       const depth = suffixSegments.length;
+  453:       if (!bestMatch || score > bestMatch.score || (score === bestMatch.score && depth > bestMatch.depth)) {
+  454:         bestMatch = {
+  455:           cwd: candidateActual,
+  456:           projectPath: info.actual,
+  457:           remapped: true,
+  458:           score,
+  459:           depth,
+  460:         };
+  461:       }
+  462:     }
+  463:   }
+  464: 
+  465:   if (bestMatch) {
+  466:     return {
+  467:       cwd: bestMatch.cwd,
+  468:       projectPath: bestMatch.projectPath,
+  469:       remapped: true,
+  470:     };
+  471:   }
+  472: 
+  473:   return {
+  474:     cwd: displayCwd,
+  475:     projectPath: "",
+  476:     remapped: false,
+  477:   };
+  478: }
+  479: 
+  480: function mapTaskRow(row, sessionNames = null, workspaceInfos = null) {
+  481:   const { codexHome } = getCodexPaths();
+  482:   const rawRolloutPath = row.rollout_path || "";
+  483:   const rolloutPath = resolveExistingRolloutPath(codexHome, rawRolloutPath);
+  484:   const cleanId = String(row.id || "").trim();
+  485:   const sessionTitle = String(sessionNames?.get(cleanId) || "").trim();
+  486:   const dbTitle = String(row.title || "").trim();
+  487:   const rolloutFirstUserMessage = readFirstUserMessageFromRollout(rolloutPath);
+  488:   const resolvedWorkspacePath = resolveTaskWorkspacePath(row.cwd || "", workspaceInfos);
+  489:   return {
+  490:     id: row.id || "",
+  491:     title: sessionTitle || dbTitle || row.first_user_message || row.id || "",
+  492:     rawTitle: dbTitle,
+  493:     sessionTitle,
+  494:     firstUserMessage: rolloutFirstUserMessage || row.first_user_message || "",
+  495:     cwd: resolvedWorkspacePath.cwd || row.cwd || "",
+  496:     rawCwd: row.cwd || "",
+  497:     projectPath: resolvedWorkspacePath.projectPath || resolvedWorkspacePath.cwd || row.cwd || "",
+  498:     rolloutPath,
+  499:     rawRolloutPath,
+  500:     createdAt: toIso(row.created_at),
+  501:     updatedAt: toIso(row.updated_at),
+  502:     archived: Number(row.archived || 0) === 1,
+  503:   };
+  504: }
+  505: 
+  506: function escapeRegExp(text) {
+  507:   return String(text || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  508: }
+  509: 
+  510: function buildFieldSnippet(text, query, radius = 28) {
+  511:   const source = String(text || "");
+  512:   const q = String(query || "").trim();
+  513:   if (!source || !q) {
+  514:     return "";
+  515:   }
+  516: 
+  517:   const haystack = source.toLowerCase();
+  518:   const index = haystack.indexOf(q.toLowerCase());
+  519:   if (index === -1) {
+  520:     return "";
+--- extension.js:940-1125 ---
+  940:     searchField: filtered.searchField,
+  941:     archiveFilter: filtered.archiveFilter,
+  942:     totalAll: allTasks.length,
+  943:     totalByArchiveFilter: filtered.totalByArchiveFilter,
+  944:     totalFiltered: filtered.items.length,
+  945:     limit,
+  946:     truncated: filtered.items.length > items.length,
+  947:     items,
+  948:   };
+  949: }
+  950: 
+  951: function getTaskById(id) {
+  952:   const cleanId = String(id || "").trim();
+  953:   if (!cleanId) {
+  954:     throw new Error("id is required");
+  955:   }
+  956: 
+  957:   const { sessionIndexPath } = getCodexPaths();
+  958:   const sessionNames = getSessionIndexNames(sessionIndexPath);
+  959:   const workspaceInfos = getWorkspaceFolderInfos();
+  960:   const db = openDb(true);
+  961:   try {
+  962:     const row = dbGet(
+  963:       db,
+  964:       `SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived
+  965:        FROM threads
+  966:        WHERE id = ?`,
+  967:       [cleanId],
+  968:     );
+  969:     if (!row) {
+  970:       throw new Error("Task not found.");
+  971:     }
+  972:     return mapTaskRow(row, sessionNames, workspaceInfos);
+  973:   } finally {
+  974:     closeDb(db);
+  975:   }
+  976: }
+  977: 
+  978: function readFirstJsonLine(filePath) {
+  979:   if (!filePath || !fs.existsSync(filePath)) {
+  980:     return null;
+  981:   }
+  982: 
+  983:   const fd = fs.openSync(filePath, "r");
+  984:   const chunkSize = 64 * 1024;
+  985:   const chunks = [];
+  986:   let offset = 0;
+  987: 
+  988:   try {
+  989:     while (true) {
+  990:       const buf = Buffer.allocUnsafe(chunkSize);
+  991:       const bytesRead = fs.readSync(fd, buf, 0, chunkSize, offset);
+  992:       if (bytesRead === 0) {
+  993:         break;
+  994:       }
+  995: 
+  996:       const data = buf.subarray(0, bytesRead);
+  997:       const nl = data.indexOf(0x0a);
+  998:       if (nl !== -1) {
+  999:         let linePart = data.subarray(0, nl);
+ 1000:         if (linePart.length && linePart[linePart.length - 1] === 0x0d) {
+ 1001:           linePart = linePart.subarray(0, linePart.length - 1);
+ 1002:         }
+ 1003:         chunks.push(linePart);
+ 1004:         break;
+ 1005:       }
+ 1006: 
+ 1007:       chunks.push(data);
+ 1008:       offset += bytesRead;
+ 1009:     }
+ 1010: 
+ 1011:     const line = Buffer.concat(chunks).toString("utf8").trim();
+ 1012:     if (!line) {
+ 1013:       return null;
+ 1014:     }
+ 1015:     return JSON.parse(line);
+ 1016:   } finally {
+ 1017:     fs.closeSync(fd);
+ 1018:   }
+ 1019: }
+ 1020: 
+ 1021: function readForkParentId(filePath) {
+ 1022:   try {
+ 1023:     const first = readFirstJsonLine(filePath);
+ 1024:     const forkedFromId = String(first?.payload?.forked_from_id || "").trim();
+ 1025:     return forkedFromId || "";
+ 1026:   } catch {
+ 1027:     return "";
+ 1028:   }
+ 1029: }
+ 1030: 
+ 1031: function getTaskReferenceById(id) {
+ 1032:   const cleanId = String(id || "").trim();
+ 1033:   if (!cleanId) {
+ 1034:     return null;
+ 1035:   }
+ 1036: 
+ 1037:   const { sessionIndexPath } = getCodexPaths();
+ 1038:   const sessionNames = getSessionIndexNames(sessionIndexPath);
+ 1039:   const workspaceInfos = getWorkspaceFolderInfos();
+ 1040:   const db = openDb(true);
+ 1041:   try {
+ 1042:     const row = dbGet(
+ 1043:       db,
+ 1044:       `SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived
+ 1045:        FROM threads
+ 1046:        WHERE id = ?`,
+ 1047:       [cleanId],
+ 1048:     );
+ 1049:     return row ? mapTaskRow(row, sessionNames, workspaceInfos) : null;
+ 1050:   } finally {
+ 1051:     closeDb(db);
+ 1052:   }
+ 1053: }
+ 1054: 
+ 1055: function getTaskDetail(payload) {
+ 1056:   const id = String(payload.id || "").trim();
+ 1057:   const task = getTaskById(id);
+ 1058:   const paths = getCodexPaths();
+ 1059:   const db = openDb(false);
+ 1060:   try {
+ 1061:     syncStoredRolloutPathIfNeeded(db, paths.codexHome, task.id, task.rawRolloutPath, task.rolloutPath);
+ 1062:   } finally {
+ 1063:     closeDb(db);
+ 1064:   }
+ 1065:   task.firstUserMessage = readFirstUserMessageFromRollout(task.rolloutPath) || task.firstUserMessage;
+ 1066:   task.postForkFirstUserMessage = "";
+ 1067:   const forkedFromId = readForkParentId(task.rolloutPath);
+ 1068:   if (forkedFromId) {
+ 1069:     task.postForkFirstUserMessage = readPostForkFirstUserMessageFromRollout(task.rolloutPath);
+ 1070:   }
+ 1071:   const parentTask = forkedFromId ? getTaskReferenceById(forkedFromId) : null;
+ 1072: 
+ 1073:   return {
+ 1074:     task,
+ 1075:     fork: forkedFromId
+ 1076:       ? {
+ 1077:           id: forkedFromId,
+ 1078:           title: parentTask?.title || parentTask?.firstUserMessage || forkedFromId,
+ 1079:           cwd: parentTask?.cwd || "",
+ 1080:           archived: !!parentTask?.archived,
+ 1081:           exists: !!parentTask,
+ 1082:         }
+ 1083:       : null,
+ 1084:   };
+ 1085: }
+ 1086: 
+ 1087: function validateTaskTitle(value) {
+ 1088:   const title = String(value || "").trim();
+ 1089:   if (!title) {
+ 1090:     return "Task name cannot be empty.";
+ 1091:   }
+ 1092:   if (title.length > MAX_TITLE_LENGTH) {
+ 1093:     return `Task name must be ${MAX_TITLE_LENGTH} characters or fewer.`;
+ 1094:   }
+ 1095:   if (/[\r\n]/.test(title)) {
+ 1096:     return "Task name must be a single line.";
+ 1097:   }
+ 1098:   return null;
+ 1099: }
+ 1100: 
+ 1101: async function renameTask(id, titleValue) {
+ 1102:   const cleanId = String(id || "").trim();
+ 1103:   const title = String(titleValue || "").trim();
+ 1104:   const validationError = validateTaskTitle(title);
+ 1105:   if (validationError) {
+ 1106:     throw new Error(validationError);
+ 1107:   }
+ 1108: 
+ 1109:   const paths = getCodexPaths();
+ 1110:   const db = openDb(false);
+ 1111:   let previousTitle = "";
+ 1112:   let previousUpdatedAt = 0;
+ 1113:   let previousUpdatedAtMs = 0;
+ 1114:   let previousStoredRolloutPath = "";
+ 1115:   let rolloutPath = "";
+ 1116:   const updatedAtMs = Date.now();
+ 1117:   const updatedAtSec = Math.floor(updatedAtMs / 1000);
+ 1118:   try {
+ 1119:     const row = dbGet(
+ 1120:       db,
+ 1121:       "SELECT id, title, updated_at, updated_at_ms, rollout_path FROM threads WHERE id = ?",
+ 1122:       [cleanId],
+ 1123:     );
+ 1124:     if (!row) {
+ 1125:       throw new Error("Task not found.");
+--- extension.js:1685-1765 ---
+ 1685:   const prefix = `${normalized}::conversation::`;
+ 1686:   for (const key of conversationSearchCache.keys()) {
+ 1687:     if (key.startsWith(prefix)) {
+ 1688:       conversationSearchCache.delete(key);
+ 1689:     }
+ 1690:   }
+ 1691:   rolloutAnalysisCache.delete(normalized);
+ 1692: }
+ 1693: 
+ 1694: async function deleteArchivedTaskRollout(rolloutPath) {
+ 1695:   const cleanPath = String(rolloutPath || "").trim();
+ 1696:   if (!cleanPath || !fs.existsSync(cleanPath)) {
+ 1697:     return;
+ 1698:   }
+ 1699: 
+ 1700:   await fsp.unlink(cleanPath);
+ 1701: }
+ 1702: 
+ 1703: async function deleteTask(payload) {
+ 1704:   const id = String(payload.id || "").trim();
+ 1705:   if (!id) {
+ 1706:     throw new Error("Task id is required.");
+ 1707:   }
+ 1708: 
+ 1709:   const confirmLabel = "Delete";
+ 1710:   const picked = await vscode.window.showWarningMessage(
+ 1711:     "This permanently deletes all local data for this archived conversation and cannot be undone.",
+ 1712:     { modal: true, detail: `Conversation ID: ${id}` },
+ 1713:     confirmLabel,
+ 1714:   );
+ 1715:   if (picked !== confirmLabel) {
+ 1716:     return { deleted: false, cancelled: true, id };
+ 1717:   }
+ 1718: 
+ 1719:   try {
+ 1720:     const result = await vscode.window.withProgress(
+ 1721:       {
+ 1722:         location: vscode.ProgressLocation.Notification,
+ 1723:         title: "Codesk is deleting the archived conversation",
+ 1724:         cancellable: false,
+ 1725:       },
+ 1726:       async (progress) => {
+ 1727:         const paths = getCodexPaths();
+ 1728:         const originalSessionIndexContent = await readTextFileIfExists(paths.sessionIndexPath);
+ 1729:         const db = openDb(false);
+ 1730:         let rolloutPath = "";
+ 1731: 
+ 1732:         try {
+ 1733:           progress.report({ message: "Checking conversation state..." });
+ 1734:           const row = dbGet(
+ 1735:             db,
+ 1736:             "SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived FROM threads WHERE id = ?",
+ 1737:             [id],
+ 1738:           );
+ 1739:           if (!row) {
+ 1740:             throw new Error("Task not found.");
+ 1741:           }
+ 1742:           if (Number(row.archived || 0) !== 1) {
+ 1743:             throw new Error("Only archived tasks can be permanently deleted.");
+ 1744:           }
+ 1745: 
+ 1746:           rolloutPath = resolveExistingRolloutPath(paths.codexHome, row.rollout_path || "");
+ 1747:           if (rolloutPath) {
+ 1748:             const normalizedRollout = normalizePathForCompare(rolloutPath);
+ 1749:             const codexRoot = normalizePathForCompare(paths.codexHome);
+ 1750:             if (!normalizedRollout || !codexRoot || !isPathInsideAnyRoot(normalizedRollout, [codexRoot])) {
+ 1751:               throw new Error("Refusing to delete a rollout file outside Codex storage.");
+ 1752:             }
+ 1753:           }
+ 1754: 
+ 1755:           progress.report({ message: "Updating session_index.jsonl..." });
+ 1756:           await removeSessionIndexEntry(paths.sessionIndexPath, id);
+ 1757: 
+ 1758:           progress.report({ message: "Updating sqlite index..." });
+ 1759:           dbRun(db, "DELETE FROM threads WHERE id = ?", [id]);
+ 1760: 
+ 1761:           if (rolloutPath && fs.existsSync(rolloutPath)) {
+ 1762:             progress.report({ message: "Deleting conversation files..." });
+ 1763:             await deleteArchivedTaskRollout(rolloutPath);
+ 1764:             invalidateConversationSearchCache(rolloutPath);
+ 1765:           }

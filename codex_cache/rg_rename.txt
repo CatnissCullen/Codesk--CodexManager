@@ -1,0 +1,29 @@
+.\extension.js:134:      case "promptRenameTask":
+.\extension.js:135:        return this.promptRenameTask(payload || {});
+.\extension.js:149:      const picked = await pickTaskForRename(this.lastScope || getDefaultScope());
+.\extension.js:156:    await this.promptRenameTask({ id: this.selectedId });
+.\extension.js:160:  async promptRenameTask(payload) {
+.\extension.js:169:      title: "Rename Codex Task",
+.\extension.js:184:      vscode.window.showInformationMessage(`Renamed Codex task: ${result.title}`);
+.\extension.js:1299:  let sawRenameEvent = false;
+.\extension.js:1344:      const isRenameEvent =
+.\extension.js:1349:      if (!isRenameEvent) {
+.\extension.js:1353:      sawRenameEvent = true;
+.\extension.js:1375:  if (!sawRenameEvent) {
+.\extension.js:1446:async function pickTaskForRename(scope) {
+.\extension.js:1461:      title: "Select Codex Task to Rename",
+.\extension.js:1858:              <button id="renameBtn" class="btn primary rename-btn">Rename</button>
+.\package.json:37:        "title": "Codesk: Rename Task"
+.\README.md:40:- Renames conversations directly inside the extension.
+.\media\webview.js:20:    optimisticRename: null,
+.\media\webview.js:489:    if (state.optimisticRename && state.optimisticRename.id !== id) {
+.\media\webview.js:490:      state.optimisticRename = null;
+.\media\webview.js:510:      state.optimisticRename &&
+.\media\webview.js:511:      state.optimisticRename.id === id &&
+.\media\webview.js:513:      new Date(String(data.task.updatedAt || 0)).getTime() < state.optimisticRename.updatedAtMs
+.\media\webview.js:515:      data.task.title = state.optimisticRename.title;
+.\media\webview.js:516:      data.task.updatedAt = state.optimisticRename.updatedAt;
+.\media\webview.js:554:      const result = await rpc("promptRenameTask", { id: state.selectedId });
+.\media\webview.js:556:        setStatus("Rename cancelled");
+.\media\webview.js:572:      state.optimisticRename = {
+.\media\webview.js:585:      setStatus(`Rename failed: ${error.message}`, "error");

@@ -1,0 +1,224 @@
+--- media/webview.js:1-120 ---
+    1: "use strict";
+    2: 
+    3: (() => {
+    4:   const vscode = acquireVsCodeApi();
+    5:   const persisted = vscode.getState() || {};
+    6:   const DEFAULT_RPC_TIMEOUT = 30000;
+    7:   const LIST_RPC_TIMEOUT = 120000;
+    8: 
+    9:   const state = {
+   10:     reqSeq: 1,
+   11:     pending: new Map(),
+   12:     scope: "project",
+   13:     search: "",
+   14:     searchField: "title",
+   15:     archiveFilter: "active",
+   16:     searchTimer: null,
+   17:     items: [],
+   18:     selectedId: "",
+   19:     detail: null,
+   20:     optimisticRename: null,
+   21:     loading: false,
+   22:     bootstrap: null,
+   23:     layout: {
+   24:       leftPaneWidth: Number.isFinite(Number(persisted.leftPaneWidth)) ? Number(persisted.leftPaneWidth) : 35,
+   25:       swapped: !!persisted.swapped,
+   26:       dragging: false,
+   27:     },
+   28:     reveal: {
+   29:       id: false,
+   30:       cwd: false,
+   31:       forkCwd: false,
+   32:       forkId: false,
+   33:     },
+   34:   };
+   35: 
+   36:   const els = {
+   37:     scopeHint: document.getElementById("scopeHint"),
+   38:     refreshBtn: document.getElementById("refreshBtn"),
+   39:     layout: document.querySelector(".layout"),
+   40:     listPane: document.querySelector(".list-pane"),
+   41:     detailPane: document.querySelector(".detail-pane"),
+   42:     splitter: document.getElementById("splitter"),
+   43:     swapPanesBtn: document.getElementById("swapPanesBtn"),
+   44:     scopeToggleBtn: document.getElementById("scopeToggleBtn"),
+   45:     archivedScopeBtn: document.getElementById("archivedScopeBtn"),
+   46:     searchFieldSelect: document.getElementById("searchFieldSelect"),
+   47:     searchInput: document.getElementById("searchInput"),
+   48:     listSummary: document.getElementById("listSummary"),
+   49:     taskList: document.getElementById("taskList"),
+   50:     emptyState: document.getElementById("emptyState"),
+   51:     detailCard: document.getElementById("detailCard"),
+   52:     detailTitle: document.getElementById("detailTitle"),
+   53:     detailProjectPath: document.getElementById("detailProjectPath"),
+   54:     openTaskBtn: document.getElementById("openTaskBtn"),
+   55:     archiveTaskBtn: document.getElementById("archiveTaskBtn"),
+   56:     deleteTaskBtn: document.getElementById("deleteTaskBtn"),
+   57:     showIdBtn: document.getElementById("showIdBtn"),
+   58:     showCwdBtn: document.getElementById("showCwdBtn"),
+   59:     detailIdWrap: document.getElementById("detailIdWrap"),
+   60:     detailCwdWrap: document.getElementById("detailCwdWrap"),
+   61:     detailId: document.getElementById("detailId"),
+   62:     detailCwd: document.getElementById("detailCwd"),
+   63:     copyIdBtn: document.getElementById("copyIdBtn"),
+   64:     copyCwdBtn: document.getElementById("copyCwdBtn"),
+   65:     detailCreated: document.getElementById("detailCreated"),
+   66:     detailUpdated: document.getElementById("detailUpdated"),
+   67:     firstMessage: document.getElementById("firstMessage"),
+   68:     postForkMessageSection: document.getElementById("postForkMessageSection"),
+   69:     postForkFirstMessage: document.getElementById("postForkFirstMessage"),
+   70:     forkInfo: document.getElementById("forkInfo"),
+   71:     renameBtn: document.getElementById("renameBtn"),
+   72:     statusBar: document.getElementById("statusBar"),
+   73:   };
+   74: 
+   75:   function esc(text) {
+   76:     return String(text ?? "").replace(/[&<>"']/g, (ch) => {
+   77:       const map = {
+   78:         "&": "&amp;",
+   79:         "<": "&lt;",
+   80:         ">": "&gt;",
+   81:         '"': "&quot;",
+   82:         "'": "&#39;",
+   83:       };
+   84:       return map[ch] || ch;
+   85:     });
+   86:   }
+   87: 
+   88:   function highlightSnippet(text, keyword) {
+   89:     const source = String(text || "");
+   90:     const q = String(keyword || "").trim();
+   91:     if (!source) {
+   92:       return "";
+   93:     }
+   94: 
+   95:     const escapedSource = esc(source);
+   96:     if (!q) {
+   97:       return escapedSource;
+   98:     }
+   99: 
+  100:     const pattern = new RegExp(`(${String(q).replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")})`, "ig");
+  101:     return escapedSource.replace(pattern, "<mark>$1</mark>");
+  102:   }
+  103: 
+  104:   function formatTime(value) {
+  105:     if (!value) {
+  106:       return "-";
+  107:     }
+  108:     const date = new Date(value);
+  109:     return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+  110:   }
+  111: 
+  112:   function setStatus(message, kind = "info") {
+  113:     if (!els.statusBar) {
+  114:       return;
+  115:     }
+  116:     els.statusBar.textContent = message;
+  117:     els.statusBar.classList.remove("is-error", "is-success");
+  118:     if (kind === "error") {
+  119:       els.statusBar.classList.add("is-error");
+  120:     }
+--- media/webview.js:430-530 ---
+  430:     const suffix = data?.truncated ? `, showing first ${shown}` : "";
+  431:     const archiveLabel = state.archiveFilter === "archived" ? "archived" : "active";
+  432:     els.listSummary.textContent = `Showing ${shown}/${filtered}, ${archiveLabel} total ${archiveTotal}${suffix}`;
+  433:   }
+  434: 
+  435:   async function loadBootstrap(options = {}) {
+  436:     const data = await rpc("bootstrap");
+  437:     state.bootstrap = data;
+  438:     if (!options.preserveState) {
+  439:       state.scope = data.defaultScope || "project";
+  440:       state.archiveFilter = "active";
+  441:     }
+  442:     renderScope();
+  443:     renderHint(null);
+  444:   }
+  445: 
+  446:   async function loadList(options = {}) {
+  447:     state.loading = true;
+  448:     renderList();
+  449: 
+  450:     const data = await rpc("listTasks", {
+  451:       scope: state.scope,
+  452:       q: state.search,
+  453:       searchField: state.searchField,
+  454:       archiveFilter: state.archiveFilter,
+  455:       limit: 250,
+  456:     }, { timeoutMs: LIST_RPC_TIMEOUT });
+  457: 
+  458:     state.items = Array.isArray(data.items) ? data.items : [];
+  459:     state.searchField = data.searchField || state.searchField;
+  460:     state.archiveFilter = data.archiveFilter || state.archiveFilter;
+  461:     els.searchFieldSelect.value = state.searchField;
+  462:     renderScope();
+  463:     const selectedVisible = state.items.some((item) => item.id === state.selectedId);
+  464:     if (!options.keepSelection) {
+  465:       state.selectedId = state.items[0]?.id || "";
+  466:       state.detail = null;
+  467:     } else if (!selectedVisible && !options.preserveDetailSelection) {
+  468:       state.selectedId = state.items[0]?.id || "";
+  469:       state.detail = null;
+  470:     }
+  471: 
+  472:     state.loading = false;
+  473:     renderHint(data);
+  474:     renderSummary(data);
+  475:     renderList();
+  476: 
+  477:     if (state.selectedId && (!options.preserveDetailSelection || state.items.some((item) => item.id === state.selectedId))) {
+  478:       await selectTask(state.selectedId, { silent: true });
+  479:     } else {
+  480:       renderDetail();
+  481:     }
+  482:   }
+  483: 
+  484:   async function selectTask(id, options = {}) {
+  485:     if (!id) {
+  486:       return;
+  487:     }
+  488: 
+  489:     if (state.optimisticRename && state.optimisticRename.id !== id) {
+  490:       state.optimisticRename = null;
+  491:     }
+  492:     state.selectedId = id;
+  493:     resetRevealState();
+  494:     vscode.postMessage({ id: `select-${Date.now()}`, op: "setSelectedTask", payload: { id, scope: state.scope } });
+  495:     if (options.scrollListToCenter) {
+  496:       renderList();
+  497:     } else {
+  498:       rerenderListPreservingScroll();
+  499:     }
+  500:     if (options.scrollListToCenter) {
+  501:       scrollTaskIntoView(id);
+  502:     }
+  503: 
+  504:     const data = await rpc("getTaskDetail", { id });
+  505:     if (state.selectedId !== id) {
+  506:       return;
+  507:     }
+  508: 
+  509:     if (
+  510:       state.optimisticRename &&
+  511:       state.optimisticRename.id === id &&
+  512:       data?.task &&
+  513:       new Date(String(data.task.updatedAt || 0)).getTime() < state.optimisticRename.updatedAtMs
+  514:     ) {
+  515:       data.task.title = state.optimisticRename.title;
+  516:       data.task.updatedAt = state.optimisticRename.updatedAt;
+  517:     }
+  518: 
+  519:     state.detail = data;
+  520:     renderDetail();
+  521:     if (!options.silent) {
+  522:       setStatus("Details updated", "success");
+  523:     }
+  524:   }
+  525: 
+  526:   async function refreshAll(options = {}) {
+  527:     setStatus("Refreshing...");
+  528:     await loadBootstrap({ preserveState: !!options.preserveState });
+  529:     await loadList({ keepSelection: !!options.keepSelection, preserveDetailSelection: !!options.preserveDetailSelection });
+  530:     setStatus("Refresh complete", "success");
+--- media/webview.js:900-1060 ---

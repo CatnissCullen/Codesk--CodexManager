@@ -1,0 +1,53 @@
+11:const VALID_SEARCH_FIELDS = new Set(["title", "id", "cwd", "firstUserMessage", "conversation"]);
+49:    vscode.workspace.onDidChangeWorkspaceFolders(() => provider.refreshVisibleViews()),
+53:    vscode.workspace.onDidChangeConfiguration((event) => {
+191:  const cfg = vscode.workspace.getConfiguration("codesk");
+241:  const folders = vscode.workspace.workspaceFolders || [];
+260:  const workspaceRoots = getWorkspaceRoots();
+265:    hasWorkspace: workspaceRoots.length > 0,
+266:    workspaceRoots,
+402:function resolveTaskWorkspacePath(cwd, workspaceInfos = null) {
+403:  const normalizedCwd = normalizePathForCompare(cwd);
+404:  const displayCwd = normalizePathForDisplay(cwd);
+405:  const infos = Array.isArray(workspaceInfos) ? workspaceInfos : getWorkspaceFolderInfos();
+408:      cwd: displayCwd,
+409:      projectPath: "",
+423:      cwd: displayCwd,
+424:      projectPath: directMatch.actual,
+429:  const cwdSegments = normalizedCwd.split(path.sep).filter(Boolean);
+435:    for (let index = 0; index < cwdSegments.length; index += 1) {
+436:      if (cwdSegments[index] !== info.nameNormalized) {
+439:      const suffixSegments = cwdSegments.slice(index + 1);
+455:          cwd: candidateActual,
+456:          projectPath: info.actual,
+467:      cwd: bestMatch.cwd,
+468:      projectPath: bestMatch.projectPath,
+474:    cwd: displayCwd,
+475:    projectPath: "",
+480:function mapTaskRow(row, sessionNames = null, workspaceInfos = null) {
+488:  const resolvedWorkspacePath = resolveTaskWorkspacePath(row.cwd || "", workspaceInfos);
+495:    cwd: resolvedWorkspacePath.cwd || row.cwd || "",
+496:    rawCwd: row.cwd || "",
+497:    projectPath: resolvedWorkspacePath.projectPath || resolvedWorkspacePath.cwd || row.cwd || "",
+813:  const workspaceInfos = getWorkspaceFolderInfos();
+818:      `SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived
+821:      ).map((row) => mapTaskRow(row, sessionNames, workspaceInfos));
+868:  const workspaceRoots = getWorkspaceRoots();
+870:  const effectiveScope = requestedScope === "project" && workspaceRoots.length === 0 ? "all" : requestedScope;
+878:    items = items.filter((task) => isPathInsideAnyRoot(task.cwd, workspaceRoots));
+893:        } else if (searchField === "cwd") {
+894:          matched = String(task.cwd || "").toLowerCase().includes(q);
+895:          snippet = matched ? buildFieldSnippet(task.cwd, q) : "";
+913:    workspaceRoots,
+938:    hasWorkspace: filtered.workspaceRoots.length > 0,
+939:    workspaceRoots: filtered.workspaceRoots,
+959:  const workspaceInfos = getWorkspaceFolderInfos();
+964:      `SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived
+972:    return mapTaskRow(row, sessionNames, workspaceInfos);
+1039:  const workspaceInfos = getWorkspaceFolderInfos();
+1044:      `SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived
+1049:    return row ? mapTaskRow(row, sessionNames, workspaceInfos) : null;
+1079:          cwd: parentTask?.cwd || "",
+1457:      detail: task.cwd || "No cwd",
+1736:            "SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived FROM threads WHERE id = ?",
+1832:            <option value="cwd">CWD</option>

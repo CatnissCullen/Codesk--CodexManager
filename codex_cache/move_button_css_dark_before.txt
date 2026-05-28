@@ -1,0 +1,10 @@
+--- media/webview.css:193-201 ---
+  193: }
+  194: 
+  195: .move-btn {
+  196:   font-weight: 600;
+  197:   color: #042b2b;
+  198:   background: #67e8d4;
+  199:   border-color: #67e8d4;
+  200: }
+  201: 

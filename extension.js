@@ -133,6 +133,8 @@ class TaskManagerViewProvider {
         return deleteTask(payload || {});
       case "promptRenameTask":
         return this.promptRenameTask(payload || {});
+      case "promptMoveTask":
+        return this.promptMoveTask(payload || {});
       default:
         throw new Error(`Unknown operation: ${op}`);
     }
@@ -178,10 +180,45 @@ class TaskManagerViewProvider {
     }
 
     const result = await renameTask(id, nextTitle);
+    if (result.unchanged) {
+      return result;
+    }
     if (result.rolloutSyncPending) {
       vscode.window.showWarningMessage(`Task renamed: ${result.title}. The conversation is still running; rename it again after completion to sync the official extension title.`);
     } else {
       vscode.window.showInformationMessage(`Renamed Codex task: ${result.title}`);
+    }
+    return result;
+  }
+
+  async promptMoveTask(payload) {
+    const id = String(payload.id || "").trim();
+    if (!id) {
+      throw new Error("Please select a task first.");
+    }
+
+    const task = getTaskById(id);
+    const currentProjectPath = task.projectPath || task.cwd || task.rawCwd || "";
+    const nextProjectPath = await vscode.window.showInputBox({
+      title: "Move Codex Task",
+      prompt: "Enter a new project path.",
+      value: currentProjectPath,
+      validateInput: validateTaskProjectPath,
+      ignoreFocusOut: true,
+    });
+
+    if (nextProjectPath === undefined) {
+      return { cancelled: true };
+    }
+
+    const result = await moveTask(id, nextProjectPath);
+    if (result.unchanged) {
+      return result;
+    }
+    if (result.rolloutSyncPending) {
+      vscode.window.showWarningMessage(`Task moved: ${result.projectPath}. The conversation is still running; move it again after completion to sync the official extension cwd.`);
+    } else {
+      vscode.window.showInformationMessage(`Moved Codex task to: ${result.projectPath}`);
     }
     return result;
   }
@@ -1098,6 +1135,34 @@ function validateTaskTitle(value) {
   return null;
 }
 
+function validateTaskProjectPath(value) {
+  const rawPath = String(value || "").trim();
+  if (!rawPath) {
+    return "Project path cannot be empty.";
+  }
+  if (/[\r\n]/.test(rawPath)) {
+    return "Project path must be a single line.";
+  }
+  if (!path.isAbsolute(rawPath)) {
+    return "Project path must be an absolute path.";
+  }
+
+  const resolvedPath = path.resolve(rawPath);
+  try {
+    const stat = fs.statSync(resolvedPath);
+    if (!stat.isDirectory()) {
+      return "Project path must point to a folder.";
+    }
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return "Project path does not exist.";
+    }
+    throw error;
+  }
+
+  return null;
+}
+
 async function renameTask(id, titleValue) {
   const cleanId = String(id || "").trim();
   const title = String(titleValue || "").trim();
@@ -1198,6 +1263,147 @@ async function renameTask(id, titleValue) {
   return {
     id: cleanId,
     title,
+    updatedAt: toIso(updatedAtSec),
+    updatedAtSec,
+    rolloutSyncPending,
+  };
+}
+
+function buildMovedTaskCwd(currentCwd, currentProjectPath, nextProjectPath) {
+  const nextProject = normalizePathForDisplay(path.resolve(String(nextProjectPath || "").trim()));
+  if (!nextProject) {
+    return "";
+  }
+
+  const cleanCwd = normalizePathForDisplay(currentCwd);
+  const cleanProjectPath = normalizePathForDisplay(currentProjectPath);
+  const normalizedCwd = normalizePathForCompare(cleanCwd);
+  const normalizedProjectPath = normalizePathForCompare(cleanProjectPath);
+  if (!normalizedCwd || !normalizedProjectPath) {
+    return nextProject;
+  }
+
+  if (normalizedCwd !== normalizedProjectPath) {
+    const prefix = normalizedProjectPath.endsWith(path.sep) ? normalizedProjectPath : `${normalizedProjectPath}${path.sep}`;
+    if (!normalizedCwd.startsWith(prefix)) {
+      return nextProject;
+    }
+  }
+
+  const relative = path.relative(cleanProjectPath, cleanCwd);
+  if (!relative || relative === "." || relative.startsWith("..") || path.isAbsolute(relative)) {
+    return nextProject;
+  }
+
+  const candidate = normalizePathForDisplay(path.join(nextProject, relative));
+  if (candidate && fs.existsSync(candidate)) {
+    return candidate;
+  }
+  return nextProject;
+}
+
+async function moveTask(id, projectPathValue) {
+  const cleanId = String(id || "").trim();
+  const requestedProjectPath = String(projectPathValue || "").trim();
+  const validationError = validateTaskProjectPath(requestedProjectPath);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+
+  const paths = getCodexPaths();
+  const db = openDb(false);
+  let previousCwd = "";
+  let previousUpdatedAt = 0;
+  let previousUpdatedAtMs = 0;
+  let previousStoredRolloutPath = "";
+  let rolloutPath = "";
+  let nextCwd = "";
+  const updatedAtMs = Date.now();
+  const updatedAtSec = Math.floor(updatedAtMs / 1000);
+  try {
+    const row = dbGet(
+      db,
+      "SELECT id, cwd, updated_at, updated_at_ms, rollout_path FROM threads WHERE id = ?",
+      [cleanId],
+    );
+    if (!row) {
+      throw new Error("Task not found.");
+    }
+
+    const resolvedWorkspacePath = resolveTaskWorkspacePath(row.cwd || "");
+    previousCwd = normalizePathForDisplay(resolvedWorkspacePath.cwd || row.cwd || "");
+    previousUpdatedAt = Number(row.updated_at || 0);
+    previousUpdatedAtMs = Number(row.updated_at_ms || 0);
+    previousStoredRolloutPath = String(row.rollout_path || "");
+    rolloutPath = resolveExistingRolloutPath(paths.codexHome, row.rollout_path || "");
+    if (rolloutPath) {
+      syncStoredRolloutPathIfNeeded(db, paths.codexHome, cleanId, previousStoredRolloutPath, rolloutPath);
+    }
+
+    nextCwd = buildMovedTaskCwd(previousCwd, resolvedWorkspacePath.projectPath || previousCwd, requestedProjectPath);
+    if (!nextCwd) {
+      throw new Error("Unable to resolve the new project path.");
+    }
+
+    if (normalizePathForCompare(nextCwd) === normalizePathForCompare(previousCwd)) {
+      const unchangedWorkspacePath = resolveTaskWorkspacePath(previousCwd);
+      return {
+        id: cleanId,
+        cwd: unchangedWorkspacePath.cwd || previousCwd,
+        projectPath: unchangedWorkspacePath.projectPath || unchangedWorkspacePath.cwd || previousCwd,
+        updatedAt: toIso(previousUpdatedAt) || new Date().toISOString(),
+        unchanged: true,
+      };
+    }
+
+    dbRun(db, "UPDATE threads SET cwd = ?, updated_at = ?, updated_at_ms = ? WHERE id = ?", [
+      nextCwd,
+      updatedAtSec,
+      updatedAtMs,
+      cleanId,
+    ]);
+  } finally {
+    closeDb(db);
+  }
+
+  let rolloutSyncPending = false;
+  try {
+    if (rolloutPath) {
+      try {
+        await updateRolloutSessionCwd(rolloutPath, cleanId, nextCwd, updatedAtMs);
+      } catch (error) {
+        if (isFileBusyError(error)) {
+          rolloutSyncPending = true;
+        } else {
+          throw error;
+        }
+      }
+    }
+  } catch (error) {
+    const revertDb = openDb(false);
+    try {
+      dbRun(
+        revertDb,
+        "UPDATE threads SET cwd = ?, updated_at = ?, updated_at_ms = ?, rollout_path = ? WHERE id = ?",
+        [
+          previousCwd,
+          previousUpdatedAt,
+          previousUpdatedAtMs,
+          previousStoredRolloutPath,
+          cleanId,
+        ],
+      );
+    } finally {
+      closeDb(revertDb);
+    }
+    throw new Error(`Move sync failed, database change was rolled back: ${error?.message || error}`);
+  }
+
+  const resolvedWorkspacePath = resolveTaskWorkspacePath(nextCwd);
+  return {
+    id: cleanId,
+    cwd: resolvedWorkspacePath.cwd || nextCwd,
+    projectPath: resolvedWorkspacePath.projectPath || resolvedWorkspacePath.cwd || nextCwd,
     updatedAt: toIso(updatedAtSec),
     updatedAtSec,
     rolloutSyncPending,
@@ -1388,6 +1594,59 @@ async function updateRolloutSessionMeta(rolloutPath, id, title, updatedAtMs) {
       }),
     );
     changed = true;
+  }
+
+  if (changed) {
+    await writeAtomicTextFile(cleanPath, `${output.join(os.EOL)}${os.EOL}`);
+    invalidateConversationSearchCache(cleanPath);
+  }
+}
+
+async function updateRolloutSessionCwd(rolloutPath, id, cwd, updatedAtMs) {
+  const cleanPath = String(rolloutPath || "").trim();
+  if (!cleanPath || !fs.existsSync(cleanPath)) {
+    return;
+  }
+
+  const content = await readTextFileIfExists(cleanPath);
+  if (!content) {
+    return;
+  }
+
+  const lines = content.split(/\r?\n/);
+  let changed = false;
+  let sawSessionMeta = false;
+  const updatedAtIso = new Date(updatedAtMs).toISOString();
+  const output = lines.map((line) => {
+    if (!line.trim()) {
+      return line;
+    }
+
+    try {
+      const entry = JSON.parse(line);
+      const isSessionMeta = entry?.type === "session_meta";
+      const metaId = String(entry?.payload?.id || "").trim();
+      if (!isSessionMeta || metaId !== id) {
+        return line;
+      }
+
+      sawSessionMeta = true;
+      entry.timestamp = updatedAtIso;
+      entry.payload = {
+        ...entry.payload,
+        cwd,
+        updated_at: updatedAtIso,
+        updated_at_ms: updatedAtMs,
+      };
+      changed = true;
+      return JSON.stringify(entry);
+    } catch {
+      return line;
+    }
+  });
+
+  if (!sawSessionMeta) {
+    return;
   }
 
   if (changed) {
@@ -1855,7 +2114,10 @@ function getWebviewHtml(webview, extensionUri) {
                 <h2 id="detailTitle" class="detail-title"></h2>
                 <div id="detailProjectPath" class="detail-project-path hidden"></div>
               </div>
-              <button id="renameBtn" class="btn primary rename-btn">Rename</button>
+              <div class="detail-primary-actions">
+                <button id="renameBtn" class="btn primary rename-btn">Rename</button>
+                <button id="moveBtn" class="btn move-btn">Move</button>
+              </div>
             </div>
 
             <div class="sensitive-actions">

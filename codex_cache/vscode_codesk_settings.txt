@@ -1,0 +1,2 @@
+SETTINGS=C:\Users\chael\AppData\Roaming\Code\User\settings.json
+NO_CODESK_SETTINGS

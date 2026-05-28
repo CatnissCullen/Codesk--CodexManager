@@ -1,0 +1,211 @@
+--- extension.js:120-210 ---
+  120:       case "setSelectedTask":
+  121:         this.selectedId = String(payload.id || "").trim();
+  122:         this.lastScope = String(payload.scope || "").trim();
+  123:         return { selectedId: this.selectedId };
+  124:       case "copyToClipboard":
+  125:         return copyToClipboard(payload || {});
+  126:       case "openOfficialTask":
+  127:         return openOfficialTask(payload || {});
+  128:       case "archiveTask":
+  129:         return archiveTask(payload || {});
+  130:       case "restoreTask":
+  131:         return restoreTask(payload || {});
+  132:       case "deleteTask":
+  133:         return deleteTask(payload || {});
+  134:       case "promptRenameTask":
+  135:         return this.promptRenameTask(payload || {});
+  136:       default:
+  137:         throw new Error(`Unknown operation: ${op}`);
+  138:     }
+  139:   }
+  140: 
+  141:   refreshVisibleViews() {
+  142:     for (const view of this.views) {
+  143:       view.webview.postMessage({ type: "refresh" });
+  144:     }
+  145:   }
+  146: 
+  147:   async renameSelectedTask() {
+  148:     if (!this.selectedId) {
+  149:       const picked = await pickTaskForRename(this.lastScope || getDefaultScope());
+  150:       if (!picked) {
+  151:         return;
+  152:       }
+  153:       this.selectedId = picked.id;
+  154:     }
+  155: 
+  156:     await this.promptRenameTask({ id: this.selectedId });
+  157:     this.refreshVisibleViews();
+  158:   }
+  159: 
+  160:   async promptRenameTask(payload) {
+  161:     const id = String(payload.id || "").trim();
+  162:     if (!id) {
+  163:       throw new Error("Please select a task first.");
+  164:     }
+  165: 
+  166:     const task = getTaskById(id);
+  167:     const currentTitle = task.title || task.firstUserMessage || task.id;
+  168:     const nextTitle = await vscode.window.showInputBox({
+  169:       title: "Rename Codex Task",
+  170:       prompt: "Enter a new task name.",
+  171:       value: currentTitle,
+  172:       validateInput: validateTaskTitle,
+  173:       ignoreFocusOut: true,
+  174:     });
+  175: 
+  176:     if (nextTitle === undefined) {
+  177:       return { cancelled: true };
+  178:     }
+  179: 
+  180:     const result = await renameTask(id, nextTitle);
+  181:     if (result.rolloutSyncPending) {
+  182:       vscode.window.showWarningMessage(`Task renamed: ${result.title}. The conversation is still running; rename it again after completion to sync the official extension title.`);
+  183:     } else {
+  184:       vscode.window.showInformationMessage(`Renamed Codex task: ${result.title}`);
+  185:     }
+  186:     return result;
+  187:   }
+  188: }
+  189: 
+  190: function getConfig() {
+  191:   const cfg = vscode.workspace.getConfiguration("codesk");
+  192:   return {
+  193:     codexHome: String(cfg.get("codexHome") || "").trim(),
+  194:     defaultScope: normalizeScope(cfg.get("defaultScope") || "project"),
+  195:   };
+  196: }
+  197: 
+  198: function getDefaultScope() {
+  199:   return getConfig().defaultScope;
+  200: }
+  201: 
+  202: function normalizeScope(scope) {
+  203:   const value = String(scope || "").trim().toLowerCase();
+  204:   if (value === "all") {
+  205:     return "all";
+  206:   }
+  207:   return "project";
+  208: }
+  209: 
+  210: function resolveCodexHome(configuredHome) {
+--- extension.js:1440-1495 ---
+ 1440:   const nextContent = output.length ? `${output.join(os.EOL)}${os.EOL}` : "";
+ 1441:   await writeAtomicTextFile(indexPath, nextContent);
+ 1442:   sessionIndexCache.delete(normalizePathForCompare(indexPath) || indexPath);
+ 1443:   return { removed };
+ 1444: }
+ 1445: 
+ 1446: async function pickTaskForRename(scope) {
+ 1447:   const list = listTasks({ scope, limit: 200 });
+ 1448:   if (!list.items.length) {
+ 1449:     vscode.window.showWarningMessage("No Codex task is available to rename.");
+ 1450:     return null;
+ 1451:   }
+ 1452: 
+ 1453:   return vscode.window.showQuickPick(
+ 1454:     list.items.map((task) => ({
+ 1455:       label: task.title || task.id,
+ 1456:       description: shortId(task.id),
+ 1457:       detail: task.cwd || "No cwd",
+ 1458:       id: task.id,
+ 1459:     })),
+ 1460:     {
+ 1461:       title: "Select Codex Task to Rename",
+ 1462:       placeHolder: "Pick a task",
+ 1463:       matchOnDescription: true,
+ 1464:       matchOnDetail: true,
+ 1465:     },
+ 1466:   );
+ 1467: }
+ 1468: 
+ 1469: function shortId(id) {
+ 1470:   const raw = String(id || "");
+ 1471:   return raw.length > 14 ? `${raw.slice(0, 8)}...${raw.slice(-4)}` : raw;
+ 1472: }
+ 1473: 
+ 1474: async function copyToClipboard(payload) {
+ 1475:   const text = String(payload.text || "");
+ 1476:   if (!text) {
+ 1477:     throw new Error("Nothing to copy.");
+ 1478:   }
+ 1479:   await vscode.env.clipboard.writeText(text);
+ 1480:   return { copied: true };
+ 1481: }
+ 1482: 
+ 1483: async function openOfficialTask(payload) {
+ 1484:   const id = String(payload.id || "").trim();
+ 1485:   if (!id) {
+ 1486:     throw new Error("Task id is required.");
+ 1487:   }
+ 1488: 
+ 1489:   const officialExtension = vscode.extensions.getExtension("openai.chatgpt");
+ 1490:   if (!officialExtension) {
+ 1491:     throw new Error("The official OpenAI Codex extension is not installed.");
+ 1492:   }
+ 1493: 
+ 1494:   if (!officialExtension.isActive) {
+ 1495:     await officialExtension.activate();
+--- extension.js:1825-1885 ---
+ 1825:       </header>
+ 1826: 
+ 1827:       <section class="toolbar">
+ 1828:         <div class="search-row">
+ 1829:           <select id="searchFieldSelect" class="search-select" aria-label="Search field">
+ 1830:             <option value="title">Task title</option>
+ 1831:             <option value="id">Session ID</option>
+ 1832:             <option value="cwd">CWD</option>
+ 1833:             <option value="firstUserMessage">First message</option>
+ 1834:             <option value="conversation">User/assistant text</option>
+ 1835:           </select>
+ 1836:           <input id="searchInput" class="search" type="text" placeholder="Search keywords" />
+ 1837:         </div>
+ 1838:       </section>
+ 1839: 
+ 1840:       <main class="layout">
+ 1841:         <aside class="list-pane">
+ 1842:           <div id="listSummary" class="list-summary">Loading...</div>
+ 1843:           <div id="taskList" class="task-list"></div>
+ 1844:         </aside>
+ 1845: 
+ 1846:         <div id="splitter" class="splitter" role="separator" aria-orientation="vertical" aria-label="Resize list and detail panes">
+ 1847:           <button id="swapPanesBtn" class="splitter-swap-btn" type="button" title="Swap left and right panes" aria-label="Swap left and right panes">↔️</button>
+ 1848:         </div>
+ 1849: 
+ 1850:         <section class="detail-pane">
+ 1851:           <div id="emptyState" class="empty-state">Select a task to view details</div>
+ 1852:           <article id="detailCard" class="detail-card hidden">
+ 1853:             <div class="detail-head">
+ 1854:               <div class="detail-title-wrap">
+ 1855:                 <h2 id="detailTitle" class="detail-title"></h2>
+ 1856:                 <div id="detailProjectPath" class="detail-project-path hidden"></div>
+ 1857:               </div>
+ 1858:               <button id="renameBtn" class="btn primary rename-btn">Rename</button>
+ 1859:             </div>
+ 1860: 
+ 1861:             <div class="sensitive-actions">
+ 1862:               <div class="fork-meta-row">
+ 1863:                 <button id="openTaskBtn" class="btn mini">Open</button>
+ 1864:                 <button id="archiveTaskBtn" class="btn mini">Archive</button>
+ 1865:                 <button id="deleteTaskBtn" class="btn mini danger hidden">Delete</button>
+ 1866:                 <button id="showIdBtn" class="btn mini">ID</button>
+ 1867:                 <span id="detailIdWrap" class="reveal-output hidden">
+ 1868:                   <span id="detailId" class="fork-meta mono"></span>
+ 1869:                   <button id="copyIdBtn" class="btn mini">Copy</button>
+ 1870:                 </span>
+ 1871:               </div>
+ 1872:               <div class="fork-meta-row">
+ 1873:                 <button id="showCwdBtn" class="btn mini">CWD</button>
+ 1874:                 <span id="detailCwdWrap" class="reveal-output hidden">
+ 1875:                   <span id="detailCwd" class="fork-meta"></span>
+ 1876:                   <button id="copyCwdBtn" class="btn mini">Copy</button>
+ 1877:                 </span>
+ 1878:               </div>
+ 1879:             </div>
+ 1880: 
+ 1881:             <p class="time-meta">
+ 1882:               <span>Created: <span id="detailCreated"></span></span>
+ 1883:               <span>Updated: <span id="detailUpdated"></span></span>
+ 1884:             </p>
+ 1885: 

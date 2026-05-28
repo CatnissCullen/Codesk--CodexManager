@@ -192,6 +192,13 @@ select {
   font-weight: 700;
 }
 
+.move-btn {
+  font-weight: 600;
+  color: #dffcf8;
+  background: #0f766e;
+  border-color: #0f766e;
+}
+
 .btn.danger {
   color: #ffd8d4;
   background: color-mix(in srgb, #6b201a 68%, var(--panel));
@@ -458,6 +465,14 @@ mark {
 .detail-title-wrap {
   min-width: 0;
   flex: 1 1 0;
+}
+
+.detail-primary-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
 .detail-title {

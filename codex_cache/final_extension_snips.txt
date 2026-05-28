@@ -1,0 +1,380 @@
+--- extension.js:140-220 ---
+  140:     }
+  141:   }
+  142: 
+  143:   refreshVisibleViews() {
+  144:     for (const view of this.views) {
+  145:       view.webview.postMessage({ type: "refresh" });
+  146:     }
+  147:   }
+  148: 
+  149:   async renameSelectedTask() {
+  150:     if (!this.selectedId) {
+  151:       const picked = await pickTaskForRename(this.lastScope || getDefaultScope());
+  152:       if (!picked) {
+  153:         return;
+  154:       }
+  155:       this.selectedId = picked.id;
+  156:     }
+  157: 
+  158:     await this.promptRenameTask({ id: this.selectedId });
+  159:     this.refreshVisibleViews();
+  160:   }
+  161: 
+  162:   async promptRenameTask(payload) {
+  163:     const id = String(payload.id || "").trim();
+  164:     if (!id) {
+  165:       throw new Error("Please select a task first.");
+  166:     }
+  167: 
+  168:     const task = getTaskById(id);
+  169:     const currentTitle = task.title || task.firstUserMessage || task.id;
+  170:     const nextTitle = await vscode.window.showInputBox({
+  171:       title: "Rename Codex Task",
+  172:       prompt: "Enter a new task name.",
+  173:       value: currentTitle,
+  174:       validateInput: validateTaskTitle,
+  175:       ignoreFocusOut: true,
+  176:     });
+  177: 
+  178:     if (nextTitle === undefined) {
+  179:       return { cancelled: true };
+  180:     }
+  181: 
+  182:     const result = await renameTask(id, nextTitle);
+  183:     if (result.unchanged) {
+  184:       return result;
+  185:     }
+  186:     if (result.rolloutSyncPending) {
+  187:       vscode.window.showWarningMessage(`Task renamed: ${result.title}. The conversation is still running; rename it again after completion to sync the official extension title.`);
+  188:     } else {
+  189:       vscode.window.showInformationMessage(`Renamed Codex task: ${result.title}`);
+  190:     }
+  191:     return result;
+  192:   }
+  193: 
+  194:   async promptMoveTask(payload) {
+  195:     const id = String(payload.id || "").trim();
+  196:     if (!id) {
+  197:       throw new Error("Please select a task first.");
+  198:     }
+  199: 
+  200:     const task = getTaskById(id);
+  201:     const currentProjectPath = task.projectPath || task.cwd || task.rawCwd || "";
+  202:     const nextProjectPath = await vscode.window.showInputBox({
+  203:       title: "Move Codex Task",
+  204:       prompt: "Enter a new project path.",
+  205:       value: currentProjectPath,
+  206:       validateInput: validateTaskProjectPath,
+  207:       ignoreFocusOut: true,
+  208:     });
+  209: 
+  210:     if (nextProjectPath === undefined) {
+  211:       return { cancelled: true };
+  212:     }
+  213: 
+  214:     const result = await moveTask(id, nextProjectPath);
+  215:     if (result.unchanged) {
+  216:       return result;
+  217:     }
+  218:     if (result.rolloutSyncPending) {
+  219:       vscode.window.showWarningMessage(`Task moved: ${result.projectPath}. The conversation is still running; move it again after completion to sync the official extension cwd.`);
+  220:     } else {
+--- extension.js:1085-1285 ---
+ 1085:     );
+ 1086:     return row ? mapTaskRow(row, sessionNames, workspaceInfos) : null;
+ 1087:   } finally {
+ 1088:     closeDb(db);
+ 1089:   }
+ 1090: }
+ 1091: 
+ 1092: function getTaskDetail(payload) {
+ 1093:   const id = String(payload.id || "").trim();
+ 1094:   const task = getTaskById(id);
+ 1095:   const paths = getCodexPaths();
+ 1096:   const db = openDb(false);
+ 1097:   try {
+ 1098:     syncStoredRolloutPathIfNeeded(db, paths.codexHome, task.id, task.rawRolloutPath, task.rolloutPath);
+ 1099:   } finally {
+ 1100:     closeDb(db);
+ 1101:   }
+ 1102:   task.firstUserMessage = readFirstUserMessageFromRollout(task.rolloutPath) || task.firstUserMessage;
+ 1103:   task.postForkFirstUserMessage = "";
+ 1104:   const forkedFromId = readForkParentId(task.rolloutPath);
+ 1105:   if (forkedFromId) {
+ 1106:     task.postForkFirstUserMessage = readPostForkFirstUserMessageFromRollout(task.rolloutPath);
+ 1107:   }
+ 1108:   const parentTask = forkedFromId ? getTaskReferenceById(forkedFromId) : null;
+ 1109: 
+ 1110:   return {
+ 1111:     task,
+ 1112:     fork: forkedFromId
+ 1113:       ? {
+ 1114:           id: forkedFromId,
+ 1115:           title: parentTask?.title || parentTask?.firstUserMessage || forkedFromId,
+ 1116:           cwd: parentTask?.cwd || "",
+ 1117:           archived: !!parentTask?.archived,
+ 1118:           exists: !!parentTask,
+ 1119:         }
+ 1120:       : null,
+ 1121:   };
+ 1122: }
+ 1123: 
+ 1124: function validateTaskTitle(value) {
+ 1125:   const title = String(value || "").trim();
+ 1126:   if (!title) {
+ 1127:     return "Task name cannot be empty.";
+ 1128:   }
+ 1129:   if (title.length > MAX_TITLE_LENGTH) {
+ 1130:     return `Task name must be ${MAX_TITLE_LENGTH} characters or fewer.`;
+ 1131:   }
+ 1132:   if (/[\r\n]/.test(title)) {
+ 1133:     return "Task name must be a single line.";
+ 1134:   }
+ 1135:   return null;
+ 1136: }
+ 1137: 
+ 1138: function validateTaskProjectPath(value) {
+ 1139:   const rawPath = String(value || "").trim();
+ 1140:   if (!rawPath) {
+ 1141:     return "Project path cannot be empty.";
+ 1142:   }
+ 1143:   if (/[\r\n]/.test(rawPath)) {
+ 1144:     return "Project path must be a single line.";
+ 1145:   }
+ 1146:   if (!path.isAbsolute(rawPath)) {
+ 1147:     return "Project path must be an absolute path.";
+ 1148:   }
+ 1149: 
+ 1150:   const resolvedPath = path.resolve(rawPath);
+ 1151:   try {
+ 1152:     const stat = fs.statSync(resolvedPath);
+ 1153:     if (!stat.isDirectory()) {
+ 1154:       return "Project path must point to a folder.";
+ 1155:     }
+ 1156:   } catch (error) {
+ 1157:     if (error?.code === "ENOENT") {
+ 1158:       return "Project path does not exist.";
+ 1159:     }
+ 1160:     throw error;
+ 1161:   }
+ 1162: 
+ 1163:   return null;
+ 1164: }
+ 1165: 
+ 1166: async function renameTask(id, titleValue) {
+ 1167:   const cleanId = String(id || "").trim();
+ 1168:   const title = String(titleValue || "").trim();
+ 1169:   const validationError = validateTaskTitle(title);
+ 1170:   if (validationError) {
+ 1171:     throw new Error(validationError);
+ 1172:   }
+ 1173: 
+ 1174:   const paths = getCodexPaths();
+ 1175:   const db = openDb(false);
+ 1176:   let previousTitle = "";
+ 1177:   let previousUpdatedAt = 0;
+ 1178:   let previousUpdatedAtMs = 0;
+ 1179:   let previousStoredRolloutPath = "";
+ 1180:   let rolloutPath = "";
+ 1181:   const updatedAtMs = Date.now();
+ 1182:   const updatedAtSec = Math.floor(updatedAtMs / 1000);
+ 1183:   try {
+ 1184:     const row = dbGet(
+ 1185:       db,
+ 1186:       "SELECT id, title, updated_at, updated_at_ms, rollout_path FROM threads WHERE id = ?",
+ 1187:       [cleanId],
+ 1188:     );
+ 1189:     if (!row) {
+ 1190:       throw new Error("Task not found.");
+ 1191:     }
+ 1192:     previousTitle = String(row.title || "");
+ 1193:     previousUpdatedAt = Number(row.updated_at || 0);
+ 1194:     previousUpdatedAtMs = Number(row.updated_at_ms || 0);
+ 1195:     previousStoredRolloutPath = String(row.rollout_path || "");
+ 1196:     rolloutPath = resolveExistingRolloutPath(paths.codexHome, row.rollout_path || "");
+ 1197:     if (rolloutPath) {
+ 1198:       syncStoredRolloutPathIfNeeded(db, paths.codexHome, cleanId, previousStoredRolloutPath, rolloutPath);
+ 1199:     }
+ 1200: 
+ 1201:     if (title === previousTitle.trim()) {
+ 1202:       return {
+ 1203:         id: cleanId,
+ 1204:         title: previousTitle,
+ 1205:         updatedAt: toIso(previousUpdatedAt) || new Date().toISOString(),
+ 1206:         unchanged: true,
+ 1207:       };
+ 1208:     }
+ 1209: 
+ 1210:     dbRun(db, "UPDATE threads SET title = ?, updated_at = ?, updated_at_ms = ? WHERE id = ?", [
+ 1211:       title,
+ 1212:       updatedAtSec,
+ 1213:       updatedAtMs,
+ 1214:       cleanId,
+ 1215:     ]);
+ 1216:   } finally {
+ 1217:     closeDb(db);
+ 1218:   }
+ 1219: 
+ 1220:   let rolloutSyncPending = false;
+ 1221:   try {
+ 1222:     await updateSessionIndex(paths.sessionIndexPath, cleanId, title, updatedAtSec);
+ 1223:     if (rolloutPath) {
+ 1224:       try {
+ 1225:         await updateRolloutSessionMeta(rolloutPath, cleanId, title, updatedAtMs);
+ 1226:       } catch (error) {
+ 1227:         if (isFileBusyError(error)) {
+ 1228:           rolloutSyncPending = true;
+ 1229:         } else {
+ 1230:           throw error;
+ 1231:         }
+ 1232:       }
+ 1233:     }
+ 1234:   } catch (error) {
+ 1235:     const revertDb = openDb(false);
+ 1236:     try {
+ 1237:       dbRun(
+ 1238:         revertDb,
+ 1239:         "UPDATE threads SET title = ?, updated_at = ?, updated_at_ms = ?, rollout_path = ? WHERE id = ?",
+ 1240:         [
+ 1241:           previousTitle,
+ 1242:           previousUpdatedAt,
+ 1243:           previousUpdatedAtMs,
+ 1244:           previousStoredRolloutPath,
+ 1245:           cleanId,
+ 1246:         ],
+ 1247:       );
+ 1248:     } finally {
+ 1249:       closeDb(revertDb);
+ 1250:     }
+ 1251:     throw new Error(`Renaming sync failed, database change was rolled back: ${error?.message || error}`);
+ 1252:   }
+ 1253: 
+ 1254:   vscode.commands.executeCommand("chatgpt.openSidebar").catch(() => {
+ 1255:     // Ignore if the official extension/command is unavailable.
+ 1256:   });
+ 1257:   setTimeout(() => {
+ 1258:     vscode.commands.executeCommand("chatgpt.openSidebar").catch(() => {
+ 1259:       // Ignore if the official extension/command is unavailable.
+ 1260:     });
+ 1261:   }, 150);
+ 1262: 
+ 1263:   return {
+ 1264:     id: cleanId,
+ 1265:     title,
+ 1266:     updatedAt: toIso(updatedAtSec),
+ 1267:     updatedAtSec,
+ 1268:     rolloutSyncPending,
+ 1269:   };
+ 1270: }
+ 1271: 
+ 1272: function buildMovedTaskCwd(currentCwd, currentProjectPath, nextProjectPath) {
+ 1273:   const nextProject = normalizePathForDisplay(path.resolve(String(nextProjectPath || "").trim()));
+ 1274:   if (!nextProject) {
+ 1275:     return "";
+ 1276:   }
+ 1277: 
+ 1278:   const cleanCwd = normalizePathForDisplay(currentCwd);
+ 1279:   const cleanProjectPath = normalizePathForDisplay(currentProjectPath);
+ 1280:   const normalizedCwd = normalizePathForCompare(cleanCwd);
+ 1281:   const normalizedProjectPath = normalizePathForCompare(cleanProjectPath);
+ 1282:   if (!normalizedCwd || !normalizedProjectPath) {
+ 1283:     return nextProject;
+ 1284:   }
+ 1285: 
+--- extension.js:1390-1465 ---
+ 1390:           previousUpdatedAt,
+ 1391:           previousUpdatedAtMs,
+ 1392:           previousStoredRolloutPath,
+ 1393:           cleanId,
+ 1394:         ],
+ 1395:       );
+ 1396:     } finally {
+ 1397:       closeDb(revertDb);
+ 1398:     }
+ 1399:     throw new Error(`Move sync failed, database change was rolled back: ${error?.message || error}`);
+ 1400:   }
+ 1401: 
+ 1402:   const resolvedWorkspacePath = resolveTaskWorkspacePath(nextCwd);
+ 1403:   return {
+ 1404:     id: cleanId,
+ 1405:     cwd: resolvedWorkspacePath.cwd || nextCwd,
+ 1406:     projectPath: resolvedWorkspacePath.projectPath || resolvedWorkspacePath.cwd || nextCwd,
+ 1407:     updatedAt: toIso(updatedAtSec),
+ 1408:     updatedAtSec,
+ 1409:     rolloutSyncPending,
+ 1410:   };
+ 1411: }
+ 1412: 
+ 1413: async function flushFile(filePath) {
+ 1414:   if (process.platform === "win32") {
+ 1415:     return;
+ 1416:   }
+ 1417: 
+ 1418:   let handle;
+ 1419:   try {
+ 1420:     handle = await fsp.open(filePath, "r+");
+ 1421:     await handle.sync();
+ 1422:   } catch (error) {
+ 1423:     const code = String(error?.code || "").trim().toUpperCase();
+ 1424:     if (code === "EPERM" || code === "EINVAL" || code === "ENOTSUP" || code === "EBADF") {
+ 1425:       return;
+ 1426:     }
+ 1427:     throw error;
+ 1428:   } finally {
+ 1429:     await handle?.close();
+ 1430:   }
+ 1431: }
+ 1432: 
+ 1433: async function writeAtomicTextFile(filePath, content) {
+ 1434:   const dir = path.dirname(filePath);
+ 1435:   await fsp.mkdir(dir, { recursive: true });
+ 1436: 
+ 1437:   const tmpPath = `${filePath}.tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+ 1438:   await fsp.writeFile(tmpPath, content, "utf8");
+ 1439:   await fsp.rename(tmpPath, filePath);
+ 1440:   await flushFile(filePath);
+ 1441: }
+ 1442: 
+ 1443: async function readTextFileIfExists(filePath) {
+ 1444:   try {
+ 1445:     return await fsp.readFile(filePath, "utf8");
+ 1446:   } catch (error) {
+ 1447:     if (error?.code === "ENOENT") {
+ 1448:       return "";
+ 1449:     }
+ 1450:     throw error;
+ 1451:   }
+ 1452: }
+ 1453: 
+ 1454: async function updateSessionIndex(indexPath, id, title, updatedAtSec) {
+ 1455:   const dir = path.dirname(indexPath);
+ 1456:   await fsp.mkdir(dir, { recursive: true });
+ 1457: 
+ 1458:   const content = await readTextFileIfExists(indexPath);
+ 1459: 
+ 1460:   const lines = content ? content.split(/\r?\n/) : [];
+ 1461:   const output = [];
+ 1462:   let found = false;
+ 1463:   const updatedAt = toIso(updatedAtSec) || new Date().toISOString();
+ 1464: 
+ 1465:   for (const line of lines) {
+--- extension.js:1848-1865 ---
+ 1848:   }
+ 1849: 
+ 1850:   await fsp.mkdir(path.dirname(toPath), { recursive: true });
+ 1851:   try {
+ 1852:     await fsp.rename(fromPath, toPath);
+ 1853:   } catch (error) {
+ 1854:     if (error?.code === "EXDEV") {
+ 1855:       await fsp.copyFile(fromPath, toPath);
+ 1856:       await fsp.unlink(fromPath);
+ 1857:     } else {
+ 1858:       throw error;
+ 1859:     }
+ 1860:   }
+ 1861:   return toPath;
+ 1862: }
+ 1863: 
+ 1864: async function setTaskArchivedState(id, nextArchived) {
+ 1865:   const cleanId = String(id || "").trim();

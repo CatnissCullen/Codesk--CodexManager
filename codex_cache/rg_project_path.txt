@@ -1,0 +1,73 @@
+media/webview.js:30:      cwd: false,
+media/webview.js:53:    detailProjectPath: document.getElementById("detailProjectPath"),
+media/webview.js:203:    state.reveal.cwd = false;
+media/webview.js:307:      const count = listData?.workspaceRoots?.length || 0;
+media/webview.js:308:      els.scopeHint.textContent = `Project scope · ${archiveLabel} · ${count} workspace roots`;
+media/webview.js:371:    const projectPath = String(task.projectPath || "").trim();
+media/webview.js:372:    els.detailProjectPath.textContent = projectPath;
+media/webview.js:373:    els.detailProjectPath.title = projectPath;
+media/webview.js:374:    els.detailProjectPath.classList.toggle("hidden", !projectPath);
+media/webview.js:379:    els.detailCwd.textContent = task.cwd || "-";
+media/webview.js:380:    els.detailCwd.title = task.cwd || "";
+media/webview.js:382:    els.detailCwdWrap.classList.toggle("hidden", !state.reveal.cwd);
+media/webview.js:410:            <button class="btn mini fork-show-cwd-btn">CWD</button>
+media/webview.js:412:              <span class="fork-meta">${esc(fork.cwd || "-")}</span>
+media/webview.js:413:              <button class="btn mini fork-copy-cwd-btn" data-text="${esc(fork.cwd || "")}">Copy</button>
+media/webview.js:760:      const showForkCwdBtn = event.target.closest(".fork-show-cwd-btn");
+media/webview.js:767:      const copyForkCwdBtn = event.target.closest(".fork-copy-cwd-btn");
+media/webview.js:815:      state.reveal.cwd = !state.reveal.cwd;
+media/webview.js:826:      copyText(state.detail?.task?.cwd || "", "Session CWD copied").catch((error) => {
+extension.js:11:const VALID_SEARCH_FIELDS = new Set(["title", "id", "cwd", "firstUserMessage", "conversation"]);
+extension.js:49:    vscode.workspace.onDidChangeWorkspaceFolders(() => provider.refreshVisibleViews()),
+extension.js:53:    vscode.workspace.onDidChangeConfiguration((event) => {
+extension.js:191:  const cfg = vscode.workspace.getConfiguration("codesk");
+extension.js:241:  const folders = vscode.workspace.workspaceFolders || [];
+extension.js:260:  const workspaceRoots = getWorkspaceRoots();
+extension.js:265:    hasWorkspace: workspaceRoots.length > 0,
+extension.js:266:    workspaceRoots,
+extension.js:402:function resolveTaskWorkspacePath(cwd, workspaceInfos = null) {
+extension.js:403:  const normalizedCwd = normalizePathForCompare(cwd);
+extension.js:404:  const displayCwd = normalizePathForDisplay(cwd);
+extension.js:405:  const infos = Array.isArray(workspaceInfos) ? workspaceInfos : getWorkspaceFolderInfos();
+extension.js:408:      cwd: displayCwd,
+extension.js:409:      projectPath: "",
+extension.js:423:      cwd: displayCwd,
+extension.js:424:      projectPath: directMatch.actual,
+extension.js:429:  const cwdSegments = normalizedCwd.split(path.sep).filter(Boolean);
+extension.js:435:    for (let index = 0; index < cwdSegments.length; index += 1) {
+extension.js:436:      if (cwdSegments[index] !== info.nameNormalized) {
+extension.js:439:      const suffixSegments = cwdSegments.slice(index + 1);
+extension.js:455:          cwd: candidateActual,
+extension.js:456:          projectPath: info.actual,
+extension.js:467:      cwd: bestMatch.cwd,
+extension.js:468:      projectPath: bestMatch.projectPath,
+extension.js:474:    cwd: displayCwd,
+extension.js:475:    projectPath: "",
+extension.js:480:function mapTaskRow(row, sessionNames = null, workspaceInfos = null) {
+extension.js:488:  const resolvedWorkspacePath = resolveTaskWorkspacePath(row.cwd || "", workspaceInfos);
+extension.js:495:    cwd: resolvedWorkspacePath.cwd || row.cwd || "",
+extension.js:496:    rawCwd: row.cwd || "",
+extension.js:497:    projectPath: resolvedWorkspacePath.projectPath || resolvedWorkspacePath.cwd || row.cwd || "",
+extension.js:813:  const workspaceInfos = getWorkspaceFolderInfos();
+extension.js:818:      `SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived
+extension.js:821:      ).map((row) => mapTaskRow(row, sessionNames, workspaceInfos));
+extension.js:868:  const workspaceRoots = getWorkspaceRoots();
+extension.js:870:  const effectiveScope = requestedScope === "project" && workspaceRoots.length === 0 ? "all" : requestedScope;
+extension.js:878:    items = items.filter((task) => isPathInsideAnyRoot(task.cwd, workspaceRoots));
+extension.js:893:        } else if (searchField === "cwd") {
+extension.js:894:          matched = String(task.cwd || "").toLowerCase().includes(q);
+extension.js:895:          snippet = matched ? buildFieldSnippet(task.cwd, q) : "";
+extension.js:913:    workspaceRoots,
+extension.js:938:    hasWorkspace: filtered.workspaceRoots.length > 0,
+extension.js:939:    workspaceRoots: filtered.workspaceRoots,
+extension.js:959:  const workspaceInfos = getWorkspaceFolderInfos();
+extension.js:964:      `SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived
+extension.js:972:    return mapTaskRow(row, sessionNames, workspaceInfos);
+extension.js:1039:  const workspaceInfos = getWorkspaceFolderInfos();
+extension.js:1044:      `SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived
+extension.js:1049:    return row ? mapTaskRow(row, sessionNames, workspaceInfos) : null;
+extension.js:1079:          cwd: parentTask?.cwd || "",
+extension.js:1457:      detail: task.cwd || "No cwd",
+extension.js:1736:            "SELECT id, title, first_user_message, cwd, rollout_path, created_at, updated_at, archived FROM threads WHERE id = ?",
+extension.js:1832:            <option value="cwd">CWD</option>
+extension.js:1856:                <div id="detailProjectPath" class="detail-project-path hidden"></div>

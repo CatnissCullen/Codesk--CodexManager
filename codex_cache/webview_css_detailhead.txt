@@ -1,0 +1,92 @@
+--- media/webview.css:430-520 ---
+  430: .empty-list,
+  431: .empty-state {
+  432:   color: var(--muted);
+  433:   padding: 16px;
+  434:   text-align: center;
+  435: }
+  436: 
+  437: .detail-pane {
+  438:   min-height: 0;
+  439:   padding: 10px;
+  440:   overflow: auto;
+  441: }
+  442: 
+  443: .detail-card {
+  444:   display: grid;
+  445:   gap: 14px;
+  446:   min-width: 0;
+  447: }
+  448: 
+  449: .detail-head {
+  450:   display: flex;
+  451:   justify-content: space-between;
+  452:   gap: 10px;
+  453:   align-items: flex-start;
+  454:   flex-wrap: wrap;
+  455:   min-width: 0;
+  456: }
+  457: 
+  458: .detail-title-wrap {
+  459:   min-width: 0;
+  460:   flex: 1 1 0;
+  461: }
+  462: 
+  463: .detail-title {
+  464:   margin: 0;
+  465:   font-size: 18px;
+  466:   line-height: 1.25;
+  467:   word-break: break-word;
+  468: }
+  469: 
+  470: .detail-project-path {
+  471:   margin-top: 4px;
+  472:   display: inline-block;
+  473:   max-width: 100%;
+  474:   width: fit-content;
+  475:   padding: 3px 8px;
+  476:   border-radius: 7px;
+  477:   color: #d0d0d0;
+  478:   background: #2a2a2a;
+  479:   font-size: 10.5px;
+  480:   line-height: 1.35;
+  481:   word-break: break-word;
+  482: }
+  483: 
+  484: .sensitive-actions {
+  485:   display: flex;
+  486:   flex-wrap: wrap;
+  487:   align-items: flex-start;
+  488:   gap: 6px;
+  489:   min-width: 0;
+  490: }
+  491: 
+  492: .time-meta {
+  493:   display: flex;
+  494:   flex-direction: column;
+  495:   gap: 2px;
+  496:   margin: 0;
+  497:   padding: 0;
+  498:   border: 0;
+  499:   border-radius: 0;
+  500:   box-shadow: none;
+  501:   background: transparent;
+  502:   color: var(--muted);
+  503:   font-size: 10.5px;
+  504: }
+  505: 
+  506: .time-meta span {
+  507:   margin: 0;
+  508:   padding: 0;
+  509:   border: 0;
+  510:   border-radius: 0;
+  511:   box-shadow: none;
+  512:   background: transparent;
+  513: }
+  514: 
+  515: .fork-meta-row {
+  516:   display: flex;
+  517:   align-items: flex-start;
+  518:   gap: 8px;
+  519:   flex-wrap: wrap;
+  520:   flex: 0 1 auto;
